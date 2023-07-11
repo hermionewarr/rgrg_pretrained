@@ -100,9 +100,10 @@ def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
     new_csv_file_path = os.path.join(path_full_dataset, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
-    header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
-    if dataset in ["valid", "test"]:
-        header.append("reference_report")
+    #header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
+    #if dataset in ["valid", "test"]:
+    #    header.append("reference_report")
+    header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "reference_report"]
 
     with open(new_csv_file_path, "w") as fp:
         csv_writer = csv.writer(fp)
@@ -408,16 +409,15 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
                 continue
 
             # for the validation and test sets, we only want to include images that have corresponding reference reports with "findings" sections
-            if dataset in ["valid", "test"]:
-                reference_report = get_reference_report(subject_id, study_id, missing_reports)
+            reference_report = get_reference_report(subject_id, study_id, missing_reports)
 
-                # skip images that don't have a reference report with "findings" section
-                if reference_report == -1:
-                    continue
+            # skip images that don't have a reference report with "findings" section
+            if reference_report == -1:
+                continue
 
-                # the reference_report will be appended to new_image_row (declared further below, which contains all information about a single image)
-                # just before new_image_row itself is appended to csv_rows (because the image could still be rejected from the validation set,
-                # if it doesn't have 29 bbox coordinates)
+            # the reference_report will be appended to new_image_row (declared further below, which contains all information about a single image)
+            # just before new_image_row itself is appended to csv_rows (because the image could still be rejected from the validation set,
+            # if it doesn't have 29 bbox coordinates)
 
             chest_imagenome_scene_graph_file_path = os.path.join(path_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
@@ -435,7 +435,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
 
             # new_image_row will store all information about 1 image as a row in the csv file
             new_image_row = [subject_id, study_id, image_id, mimic_image_file_path]
-            bbox_coordinates = []
+            """ bbox_coordinates = []
             bbox_labels = []
             bbox_phrases = []
             bbox_phrase_exist_vars = []
@@ -508,14 +508,19 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
                 csv_rows.append(new_image_row)
 
                 num_rows_created += 1
+            """
+            new_image_row.append(reference_report)
+            csv_rows.append(new_image_row)
+            num_rows_created += 1
+            
             # test set 2 will contain the remaining 5% of test set images, which do not have bbox information for all 29 regions
-            elif dataset == "test" and num_regions != 29:
+            """elif dataset == "test" and num_regions != 29:
                 new_image_row.append(reference_report)
                 csv_rows_less_than_29_regions.append(new_image_row)
 
             if num_regions != 29:
                 num_images_without_29_regions += 1
-
+            """
             # break out of loop if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is specified
             if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and num_rows_created >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
                 break

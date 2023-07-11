@@ -28,3 +28,15 @@ path_chexbert_weights = "/u/home/tanida/region-guided-chest-x-ray-report-generat
 path_runs_object_detector = "/u/home/tanida/runs/object_detector"
 path_runs_full_model = "/u/home/tanida/runs/full_model"
 path_test_set_evaluation_scores_txt_files = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src"
+
+DATA_PATH = "/home/hermione/Documents/data/"
+MODEL_INFO_PATH = "/home/hermione/Documents/VLP/TUM/rgrg_pretrained/" #/home/hermione/Documents/VLP/rgrg/src/runs
+path_chest_imagenome = DATA_PATH+"rgrg/chest-imagenome-dataset-1.0.0/" #hmm do we need this?
+path_mimic_cxr = DATA_PATH+"physionet.org/files/mimic-cxr/2.0.0/"
+path_mimic_cxr_jpg = DATA_PATH+"physionet.org/files/mimic-cxr-jpg/2.0.0/"
+path_full_dataset = DATA_PATH+"rgrg/dataset-with-reference-reports_small"
+path_chexbert_weights = DATA_PATH+"rgrg/chexbert.pth"
+#path_runs_object_detector = MODEL_INFO_PATH+"src/runs/object_detector"
+path_runs_full_model = MODEL_INFO_PATH+"src/runs/full_model"
+path_test_set_evaluation_scores_txt_files = MODEL_INFO_PATH+"src/region-guided-chest-x-ray-report-generation"
+model_trained_checkpoint = "/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt"

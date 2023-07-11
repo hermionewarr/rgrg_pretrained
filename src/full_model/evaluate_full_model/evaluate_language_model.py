@@ -1195,7 +1195,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                     output = model.generate(
                         images.to(device, non_blocking=True),
                         max_length=MAX_NUM_TOKENS_GENERATE,
-                        num_beams=NUM_BEAMS,
+                        #num_beams=NUM_BEAMS,
                         early_stopping=True,
                     )
             except RuntimeError as e:  # out of memory error

@@ -10,6 +10,8 @@ from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredict
 from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
 # from torchinfo import summary
 
+import sys
+sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
 from src.object_detector.custom_roi_heads import CustomRoIHeads
 from src.object_detector.custom_rpn import CustomRegionProposalNetwork
 from src.object_detector.image_list import ImageList
@@ -212,13 +214,13 @@ class ObjectDetector(nn.Module):
                     - detections
                     - top_region_features
                     - class_detected
-        """
+        
         if targets is not None:
             self._check_targets(targets)
-
+        """
         features = self.backbone(images)
 
-        images, features = self._transform_inputs_for_rpn_and_roi(images, features)
+        """ images, features = self._transform_inputs_for_rpn_and_roi(images, features)
 
         proposals, proposal_losses = self.rpn(images, features, targets)
         roi_heads_output = self.roi_heads(features, proposals, images.image_sizes, targets)
@@ -238,24 +240,9 @@ class ObjectDetector(nn.Module):
 
         losses = {}
         losses.update(detector_losses)
-        losses.update(proposal_losses)
+        losses.update(proposal_losses) """
 
-        # if we don't return the region features, then we train/evaluate the object detector in isolation (i.e. not as part of the full model)
-        if not self.return_feature_vectors:
-            if self.training:
-                # we only need the losses to train the object detector
-                return losses
-            else:
-                # we need both losses, detections and class_detected to evaluate the object detector
-                # losses with be an empty dict if targets == None (i.e. during inference)
-                return losses, detections, class_detected
-
+     
         # if we return region features, then we train/evaluate the full model (with object detector as one part of it)
-        if self.return_feature_vectors:
-            if self.training:
-                # we need the losses to train the object detector, and the top_region_features/class_detected to train the binary classifier and decoder
-                return losses, top_region_features, class_detected
-            else:
-                # we additionally need the detections to evaluate the object detector
-                # losses will be an empty dict if targets == None (i.e. during inference)
-                return losses, detections, top_region_features, class_detected
+        return features
+    

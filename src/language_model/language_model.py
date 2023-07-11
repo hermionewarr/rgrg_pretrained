@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torchinfo import summary
 from transformers import GPT2LMHeadModel
-from transformers.generation_beam_search import BeamSearchScorer
+from transformers.generation.beam_search import BeamSearchScorer
 
 
 class Conv1DWithTrainedWeights(nn.Module):
@@ -227,6 +227,8 @@ class LanguageModel(nn.Module):
         self.gpt2_blocks = nn.ModuleList(nn.ModuleList(gpt2_block.children()) for gpt2_block in self.gpt2_blocks)
 
         # small neural network to transform embeddings coming from the image feature space into embeddings in the text feature space
+        #self.avg_pool = nn.AvgPool2d(kernel_size=16)
+        #self.dim_reduction = nn.Linear(2048, 1024)
         self.feature_space_transformation_nn = nn.Sequential(
             nn.Linear(in_features=1024, out_features=1024),
             nn.ReLU(),
@@ -279,7 +281,13 @@ class LanguageModel(nn.Module):
         """
         # get a boolean copy of the attention_mask and invert it
         mask_to_ignore_padding_tokens_for_loss_computation = ~(attention_mask.to(torch.bool))
-
+        avg_pool = nn.AvgPool2d(kernel_size=16)
+        dim_reduction = nn.Linear(2048, 1024, device=self.device)
+        #pooled = self.avg_pool(image_hidden_states)
+        #image_hidden_states = self.dim_reduction(torch.squeeze(pooled,(2,3))) #just squeeze the last two dimensions
+        pooled = avg_pool(image_hidden_states)
+        image_hidden_states = dim_reduction(torch.squeeze(pooled,(2,3))) #just squeeze the last two dimensions
+        
         # transform image_hidden_states from image feature space to text feature space
         image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape [batch_size x word_hidden_dim], with word_hidden_dim = 1024
 
@@ -402,7 +410,7 @@ class LanguageModel(nn.Module):
     def generate(self,
                  image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim]
                  max_length: int = None,
-                 num_beams: int = 1,
+                 num_beams: int = 4,
                  num_beam_groups: int = 1,
                  do_sample: bool = False,
                  num_return_sequences: int = 1,

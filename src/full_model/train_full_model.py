@@ -17,6 +17,8 @@ from torch.utils.data import DataLoader
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
+import sys
+sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
 from src.full_model.custom_collator import CustomCollator
 from src.full_model.custom_dataset import CustomDataset
 from src.full_model.evaluate_full_model.evaluate_model import evaluate_model
@@ -134,44 +136,34 @@ def train_model(
         log.info(f"Training epoch {epoch}!\n")
 
         train_losses_dict = {
-            "total_loss": 0.0,
-            "obj_detector_loss": 0.0,
-            "region_selection_loss": 0.0,
-            "region_abnormal_loss": 0.0,
+            "total_loss": 0.0
         }
-
-        if not PRETRAIN_WITHOUT_LM_MODEL:
-            train_losses_dict["language_model_loss"] = 0.0
 
         run_params["steps_taken"] = 0  # to know when to evaluate model during epoch and to normalize losses
 
         for num_batch, batch in tqdm(enumerate(train_dl)):
             images = batch["images"]
-            image_targets = batch["image_targets"]
-            region_has_sentence = batch["region_has_sentence"]
-            region_is_abnormal = batch["region_is_abnormal"]
+            #image_targets = batch["image_targets"]
+            #region_has_sentence = batch["region_has_sentence"]
+            #region_is_abnormal = batch["region_is_abnormal"]
 
-            batch_size = images.size(0)
+            #batch_size = images.size(0)
 
             images = images.to(device, non_blocking=True)
-            image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
-            region_has_sentence = region_has_sentence.to(device, non_blocking=True)
-            region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
+            #image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
+            #region_has_sentence = region_has_sentence.to(device, non_blocking=True)
+            #region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
 
-            if PRETRAIN_WITHOUT_LM_MODEL:
-                input_ids = None
-                attention_mask = None
-            else:
-                input_ids = batch["input_ids"]
-                attention_mask = batch["attention_mask"]
+            input_ids = batch["input_ids"]
+            attention_mask = batch["attention_mask"]
 
-                input_ids = input_ids.to(device, non_blocking=True)
-                attention_mask = attention_mask.to(device, non_blocking=True)
+            input_ids = input_ids.to(device, non_blocking=True)
+            attention_mask = attention_mask.to(device, non_blocking=True)
 
             try:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
-                    output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
-
+                    output = model(images, input_ids, attention_mask)
+                    #print(torch.cuda.memory_summary())
                     # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
                     # this can happen if e.g. the object detector did not detect any regions in an image (e.g. there are a couple of lateral chest x-rays in ChestImaGenome,
                     # even though the dataset should only include frontal chest x-rays. These bad input images can trigger output == -1)
@@ -183,30 +175,7 @@ def train_model(
                         optimizer.zero_grad()
                         continue
 
-                    if PRETRAIN_WITHOUT_LM_MODEL:
-                        (
-                            obj_detector_loss_dict,
-                            classifier_loss_region_selection,
-                            classifier_loss_region_abnormal,
-                        ) = output
-                    else:
-                        (
-                            obj_detector_loss_dict,
-                            classifier_loss_region_selection,
-                            classifier_loss_region_abnormal,
-                            language_model_loss,
-                        ) = output
-
-                    # sum up all 4 losses from the object detector
-                    obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
-
-                    # sum up the rest of the losses
-                    total_loss = (
-                        WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
-                    )
-
-                    if not PRETRAIN_WITHOUT_LM_MODEL:
-                        total_loss += WEIGHT_LANGUAGE_MODEL_LOSS * language_model_loss
+                    total_loss = output
 
                 scaler.scale(total_loss).backward()
 
@@ -224,6 +193,7 @@ def train_model(
 
             if oom:
                 # free up memory
+                print(torch.cuda.memory_summary())
                 for p in model.parameters():
                     if p.grad is not None:
                         del p.grad
@@ -239,17 +209,13 @@ def train_model(
 
             list_of_losses = [
                 total_loss,
-                obj_detector_losses,
-                classifier_loss_region_selection,
-                classifier_loss_region_abnormal,
             ]
 
             if not PRETRAIN_WITHOUT_LM_MODEL:
-                list_of_losses.append(language_model_loss)
+                list_of_losses.append(output)
 
             # dicts are insertion ordered since Python 3.7
-            for loss_type, loss in zip(train_losses_dict, list_of_losses):
-                train_losses_dict[loss_type] += loss.item() * batch_size
+            train_losses_dict["total_loss"] += total_loss
 
             run_params["steps_taken"] += 1
             run_params["overall_steps_taken"] += 1
@@ -276,8 +242,7 @@ def train_model(
                 model.train()
 
                 # reset values for the next evaluation
-                for loss_type in train_losses_dict:
-                    train_losses_dict[loss_type] = 0.0
+                train_losses_dict["total_loss"] = 0.0
                 run_params["steps_taken"] = 0
                 optimizer.zero_grad()
 
@@ -321,9 +286,9 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=NUM_WORKERS,
-        worker_init_fn=seed_worker,
+        #worker_init_fn=seed_worker, #fixes the num workers error.
         generator=g,
-        pin_memory=True,
+        pin_memory=False,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -331,7 +296,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         batch_size=BATCH_SIZE,
         shuffle=False,
         num_workers=0,  # could also be set to NUM_WORKERS, but I had some problems with the val loader stopping sometimes when num_workers != 0
-        pin_memory=True,
+        pin_memory=False,
     )
 
     return train_loader, val_loader
@@ -362,8 +327,8 @@ def get_transforms(dataset: str):
             A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
-        ],
-        bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_labels"]),
+        ]#,
+        #bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_labels"]),
     )
 
     # don't apply data augmentations to val set (and test set)
@@ -373,8 +338,8 @@ def get_transforms(dataset: str):
             A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
-        ],
-        bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_labels"]),
+        ]#,
+        #bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_labels"]),
     )
 
     if dataset == "train":
@@ -563,10 +528,10 @@ def main():
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     # resume_training = False
-    checkpoint = None
-    # checkpoint = torch.load(
-    #     "/u/home/tanida/runs/full_model/run_45/checkpoints/checkpoint_val_loss_106.395_overall_steps_56835.pt", map_location=device
-    # )
+    #checkpoint = None
+    checkpoint = torch.load(
+         "/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt", map_location=device
+    )
 
     model = get_model(checkpoint)
 
