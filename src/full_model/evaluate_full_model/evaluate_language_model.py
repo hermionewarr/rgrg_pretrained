@@ -511,21 +511,16 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
 def write_sentences_and_reports_to_file(
     gen_and_ref_sentences,
     gen_and_ref_reports,
-    gen_sentences_with_corresponding_regions,
+    #gen_sentences_with_corresponding_regions,
     generated_sentences_and_reports_folder_path,
     overall_steps_taken,
 ):
     def write_sentences():
         txt_file_name = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences", f"generated_sentences_step_{overall_steps_taken}")
-        txt_file_name_abnormal = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences", f"generated_abnormal_sentences_step_{overall_steps_taken}")
+        #txt_file_name_abnormal = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences", f"generated_abnormal_sentences_step_{overall_steps_taken}")
 
         with open(txt_file_name, "w") as f:
             for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
-                f.write(f"Generated sentence: {gen_sent}\n")
-                f.write(f"Reference sentence: {ref_sent}\n\n")
-
-        with open(txt_file_name_abnormal, "w") as f:
-            for gen_sent, ref_sent in zip(generated_sentences_abnormal_regions, reference_sentences_abnormal_regions):
                 f.write(f"Generated sentence: {gen_sent}\n")
                 f.write(f"Reference sentence: {ref_sent}\n\n")
 
@@ -564,9 +559,9 @@ def write_sentences_and_reports_to_file(
 
     # all below are list of str
     generated_sentences = gen_and_ref_sentences["generated_sentences"][:num_generated_sentences_to_save]
-    generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
+    #generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
     reference_sentences = gen_and_ref_sentences["reference_sentences"][:num_generated_sentences_to_save]
-    reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
+    #reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
 
     write_sentences()
 
@@ -664,322 +659,6 @@ def get_generated_sentence_for_region(
     index = cum_sum_true_values[num_img][region_index]
 
     return generated_sentences_for_selected_regions[index]
-
-
-def transform_sentence_to_fit_under_image(sentence):
-    """
-    Adds line breaks and whitespaces such that long reference or generated sentence
-    fits under the plotted image.
-    Values like max_line_length and prefix_for_alignment were found by trial-and-error.
-    """
-    max_line_length = 60
-    if len(sentence) < max_line_length:
-        return sentence
-
-    words = sentence.split()
-    transformed_sent = ""
-    current_line_length = 0
-    prefix_for_alignment = "\n" + " " * 20
-    for word in words:
-        if len(word) + current_line_length > max_line_length:
-            word = f"{prefix_for_alignment}{word}"
-            current_line_length = -len(prefix_for_alignment)
-
-        current_line_length += len(word)
-        transformed_sent += word + " "
-
-    return transformed_sent
-
-
-def update_region_set_text(
-    region_set_text,
-    color,
-    reference_sentences_img,
-    generated_sentences_for_selected_regions,
-    region_index,
-    selected_regions,
-    num_img,
-):
-    """
-    Create a single string region_set_text like in the example below.
-    Each update creates 1 paragraph for 1 region/bbox.
-    The (b), (r) and (y) represent the colors of the bounding boxes (in this case blue, red and yellow).
-
-    Example:
-
-    (b):
-      reference: Normal cardiomediastinal silhouette, hila, and pleura.
-      generated: The mediastinal and hilar contours are unremarkable.
-
-    (r):
-      reference:
-      generated: [REGION NOT SELECTED]
-
-    (y):
-      reference:
-      generated: There is no pleural effusion or pneumothorax.
-
-    (... continues for 3 more regions/bboxes, for a total of 6 per region_set)
-    """
-    region_set_text += f"({color}):\n"
-    reference_sentence_region = reference_sentences_img[region_index]
-
-    # in case sentence is too long
-    reference_sentence_region = transform_sentence_to_fit_under_image(reference_sentence_region)
-
-    region_set_text += f"  reference: {reference_sentence_region}\n"
-
-    box_region_selected = selected_regions[num_img][region_index]
-    if not box_region_selected:
-        region_set_text += "  generated: [REGION NOT SELECTED]\n\n"
-    else:
-        generated_sentence_region = get_generated_sentence_for_region(
-            generated_sentences_for_selected_regions, selected_regions, num_img, region_index
-        )
-        generated_sentence_region = transform_sentence_to_fit_under_image(generated_sentence_region)
-        region_set_text += f"  generated: {generated_sentence_region}\n\n"
-
-    return region_set_text
-
-
-def plot_box(box, ax, clr, linestyle, region_detected=True):
-    x0, y0, x1, y1 = box
-    h = y1 - y0
-    w = x1 - x0
-    ax.add_artist(
-        plt.Rectangle(xy=(x0, y0), height=h, width=w, fill=False, color=clr, linewidth=1, linestyle=linestyle)
-    )
-
-    # add an annotation to the gt box, that the pred box does not exist (i.e. the corresponding region was not detected)
-    if not region_detected:
-        ax.annotate("not detected", (x0, y0), color=clr, weight="bold", fontsize=10)
-
-
-def plot_detections_and_sentences_to_tensorboard(
-    writer,
-    num_batch,
-    overall_steps_taken,
-    images,
-    image_targets,
-    selected_regions,
-    detections,
-    class_detected,
-    reference_sentences,
-    generated_sentences_for_selected_regions,
-):
-    # pred_boxes_batch is of shape [batch_size x 29 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
-    # they are sorted in the 2nd dimension, meaning the 1st of the 29 boxes corresponds to the 1st region/class,
-    # the 2nd to the 2nd class and so on
-    pred_boxes_batch = detections["top_region_boxes"]
-
-    # image_targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
-    # gt_boxes is of shape [batch_size x 29 x 4]
-    gt_boxes_batch = torch.stack([t["boxes"] for t in image_targets], dim=0)
-
-    # plot 6 regions at a time, as to not overload the image with boxes (except for region_set_5, which has 5 regions)
-    # the region_sets were chosen as to minimize overlap between the contained regions (i.e. better visibility)
-    region_set_1 = ["right lung", "right costophrenic angle", "left lung", "left costophrenic angle", "cardiac silhouette", "spine"]
-    region_set_2 = ["right upper lung zone", "right mid lung zone", "right lower lung zone", "left upper lung zone", "left mid lung zone", "left lower lung zone"]
-    region_set_3 = ["right hilar structures", "right apical zone", "left hilar structures", "left apical zone", "right hemidiaphragm", "left hemidiaphragm"]
-    region_set_4 = ["trachea", "right clavicle", "left clavicle", "aortic arch", "abdomen", "right atrium"]
-    region_set_5 = ["mediastinum", "svc", "cavoatrial junction", "carina", "upper mediastinum"]
-
-    regions_sets = [region_set_1, region_set_2, region_set_3, region_set_4, region_set_5]
-
-    # put channel dimension (1st dim) last (0-th dim is batch-dim)
-    images = images.numpy().transpose(0, 2, 3, 1)
-
-    for num_img, image in enumerate(images):
-
-        gt_boxes_img = gt_boxes_batch[num_img]
-        pred_boxes_img = pred_boxes_batch[num_img]
-        class_detected_img = class_detected[num_img].tolist()
-        reference_sentences_img = reference_sentences[num_img]
-
-        for num_region_set, region_set in enumerate(regions_sets):
-            fig = plt.figure(figsize=(8, 8))
-            ax = plt.gca()
-
-            plt.imshow(image, cmap="gray")
-            plt.axis("on")
-
-            region_indices = [ANATOMICAL_REGIONS[region] for region in region_set]
-            region_colors = ["b", "g", "r", "c", "m", "y"]
-
-            if num_region_set == 4:
-                region_colors.pop()
-
-            region_set_text = ""
-
-            for region_index, color in zip(region_indices, region_colors):
-                # box_gt and box_pred are both [List[float]] of len 4
-                box_gt = gt_boxes_img[region_index].tolist()
-                box_pred = pred_boxes_img[region_index].tolist()
-                box_region_detected = class_detected_img[region_index]
-
-                plot_box(box_gt, ax, clr=color, linestyle="solid", region_detected=box_region_detected)
-
-                # only plot predicted box if class was actually detected
-                if box_region_detected:
-                    plot_box(box_pred, ax, clr=color, linestyle="dashed")
-
-                region_set_text = update_region_set_text(
-                    region_set_text,
-                    color,
-                    reference_sentences_img,
-                    generated_sentences_for_selected_regions,
-                    region_index,
-                    selected_regions,
-                    num_img,
-                )
-
-            title = get_plot_title(region_set, region_indices, region_colors, class_detected_img)
-            ax.set_title(title)
-
-            plt.xlabel(region_set_text, loc="left")
-
-            # using writer.add_figure does not correctly display the region_set_text in tensorboard
-            # so instead, fig is first saved as a png file to memory via BytesIO
-            # (this also saves the region_set_text correctly in the png when bbox_inches="tight" is set)
-            # then the png is loaded from memory and the 4th channel (alpha channel) is discarded
-            # finally, writer.add_image is used to display the image in tensorboard
-            buf = io.BytesIO()
-            fig.savefig(buf, bbox_inches="tight")
-            buf.seek(0)
-            im = Image.open(buf)
-            im = np.asarray(im)[..., :3]
-
-            writer_image_num = num_batch * BATCH_SIZE + num_img
-            writer.add_image(
-                f"img_{writer_image_num}_region_set_{num_region_set}",
-                im,
-                global_step=overall_steps_taken,
-                dataformats="HWC",
-            )
-
-            plt.close(fig)
-
-
-def update_gen_sentences_with_corresponding_regions(
-    gen_sentences_with_corresponding_regions,
-    generated_sents_for_selected_regions,
-    selected_regions
-):
-    """
-    Args:
-        gen_sentences_with_corresponding_regions (list[list[tuple[str, str]]]):
-            len(outer_list)= (NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE),
-            and inner list has len of how many regions were selected for a given image.
-            Inner list hold tuples of (region_name, gen_sent), i.e. region name and its corresponding generated sentence
-        generated_sentences_for_selected_regions (List[str]): of length "num_regions_selected_in_batch"
-        selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
-    """
-    def get_region_name(region_index: int):
-        for i, region_name in enumerate(ANATOMICAL_REGIONS):
-            if i == region_index:
-                return region_name
-
-    index_gen_sentence = 0
-
-    # selected_regions_single_image is a row with 29 bool values corresponding to a single image
-    for selected_regions_single_image in selected_regions:
-        gen_sents_with_regions_single_image = []
-
-        for region_index, region_selected_bool in enumerate(selected_regions_single_image):
-            if region_selected_bool:
-                region_name = get_region_name(region_index)
-                gen_sent = generated_sents_for_selected_regions[index_gen_sentence]
-
-                gen_sents_with_regions_single_image.append((region_name, gen_sent))
-
-                index_gen_sentence += 1
-
-        gen_sentences_with_corresponding_regions.append(gen_sents_with_regions_single_image)
-
-
-def update_num_generated_sentences_per_image(
-    gen_and_ref_sentences: dict,
-    selected_regions: np.array
-):
-    """
-    selected_regions is a boolean array of shape (batch_size x 29) that will have a True value for all regions that were selected and hence for which sentences were generated.
-    Thus to get the number of generated sentences per image, we just have to add up the True value along axis 1 (i.e. along the region dimension)
-    """
-    num_gen_sents_per_image = selected_regions.sum(axis=1).tolist()  # indices is a list[int] of len(batch_size)
-    gen_and_ref_sentences["num_generated_sentences_per_image"].extend(num_gen_sents_per_image)
-
-
-def update_gen_and_ref_sentences_for_regions(
-    gen_and_ref_sentences: dict,
-    generated_sents_for_selected_regions: list[str],
-    reference_sents_for_selected_regions: list[str],
-    selected_regions: np.array
-):
-    """Updates the gen_and_ref_sentences dict for each of the 29 regions, i.e. appends the generated and reference sentences for the regions (if they exist)
-
-    Args:
-        gen_and_ref_sentences (dict):
-        generated_sents_for_selected_regions (List[str]): has exactly num_regions_selected_in_batch generated sentences
-        reference_sents_for_selected_regions (List[str]): has exactly num_regions_selected_in_batch reference sentences
-        selected_regions (np.array([bool])): of shape batch_size x 29, has exactly num_regions_selected_in_batch True values
-        that specify the regions for whom sentences were generated
-
-    Implementation is not too easy to understand, so here is a toy example with some toy values to explain.
-
-    generated_sents_for_selected_regions = ["Heart is ok.", "Spine is ok."]
-    reference_sents_for_selected_regions = ["Cardiac silhouette is ok.", "Spine is not ok."]
-    selected_regions = [
-        [False, False, True],
-        [True, False, False]
-    ]
-
-    In this toy example, the batch_size = 2 and there are only 3 regions in total for simplicity (instead of the 29).
-    The generated_sents_for_selected_regions and reference_sents_for_selected_regions are of len 2, meaning num_regions_selected_in_batch = 2.
-    Therefore, the selected_regions boolean array also has exactly 2 True values.
-
-    (1) Flatten selected_regions:
-        selected_regions_flat = [False, False, True, True, False, False]
-
-    (2) Iterate until 1st True value is found in selected_regions_flat:
-        index_gen_ref_sentence = 0 at the moment
-        curr_index = 2 at the moment
-        We do a modulo operation to get the region_index, i.e. region_index = curr_index % 3 = 2
-
-        We get the gen_sent and ref_sent at index_gen_ref_sentence, i.e.
-        gen_sent = "Heart is ok."
-        ref_sent = "Cardiac silhouette is ok."
-
-        We append them to the respective lists in gen_and_ref_sentences[region_index]
-
-        We increase index_gen_ref_sentence by 1, such that at the next True value the next gen_sent and ref_sent are taken.
-
-    (2) Iterate until the 2nd True value is found in selected_regions_flat:
-        index_gen_ref_sentence = 1 at the moment
-        curr_index = 3 at the moment
-        We do a modulo operation to get the region_index, i.e. region_index = curr_index % 3 = 0
-
-        We get the gen_sent and ref_sent at index_gen_ref_sentence, i.e.
-        gen_sent = "Spine is ok."
-        ref_sent = "Spine is not ok."
-
-        We append them to the respective lists in gen_and_ref_sentences[region_index]
-
-        We increase index_gen_ref_sentence by 1, such that at the next True value the next gen_sent and ref_sent are taken.
-    """
-    index_gen_ref_sentence = 0
-
-    # of shape (batch_size * 29)
-    selected_regions_flat = selected_regions.reshape(-1)
-    for curr_index, region_selected_bool in enumerate(selected_regions_flat):
-        if region_selected_bool:
-            region_index = curr_index % 29
-            gen_sent = generated_sents_for_selected_regions[index_gen_ref_sentence]
-            ref_sent = reference_sents_for_selected_regions[index_gen_ref_sentence]
-
-            gen_and_ref_sentences[region_index]["generated_sentences"].append(gen_sent)
-            gen_and_ref_sentences[region_index]["reference_sentences"].append(ref_sent)
-
-            index_gen_ref_sentence += 1
 
 
 def get_generated_reports(generated_sentences_for_selected_regions, selected_regions, sentence_tokenizer, bertscore_threshold):
@@ -1099,28 +778,6 @@ def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions
 
     return ref_sentences_for_selected_regions.tolist()
 
-
-def get_sents_for_normal_abnormal_selected_regions(region_is_abnormal, selected_regions, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions):
-    selected_region_is_abnormal = region_is_abnormal[selected_regions]
-    # selected_region_is_abnormal is a bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
-
-    gen_sents_for_selected_regions = np.asarray(generated_sentences_for_selected_regions)
-    ref_sents_for_selected_regions = np.asarray(reference_sentences_for_selected_regions)
-
-    gen_sents_for_normal_selected_regions = gen_sents_for_selected_regions[~selected_region_is_abnormal].tolist()
-    gen_sents_for_abnormal_selected_regions = gen_sents_for_selected_regions[selected_region_is_abnormal].tolist()
-
-    ref_sents_for_normal_selected_regions = ref_sents_for_selected_regions[~selected_region_is_abnormal].tolist()
-    ref_sents_for_abnormal_selected_regions = ref_sents_for_selected_regions[selected_region_is_abnormal].tolist()
-
-    return (
-        gen_sents_for_normal_selected_regions,
-        gen_sents_for_abnormal_selected_regions,
-        ref_sents_for_normal_selected_regions,
-        ref_sents_for_abnormal_selected_regions,
-    )
-
-
 def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path):
     epoch = run_params["epoch"]
     overall_steps_taken = run_params["overall_steps_taken"]
@@ -1182,7 +839,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
 
             images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
             image_targets = batch["image_targets"]
-            region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 29]
+            #region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 29]
 
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
             reference_sentences = batch["reference_sentences"]

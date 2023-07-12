@@ -54,7 +54,7 @@ from src.full_model.run_configurations import (
     WEIGHT_LANGUAGE_MODEL_LOSS,
 )
 from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
-
+#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
@@ -289,6 +289,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         #worker_init_fn=seed_worker, #fixes the num workers error.
         generator=g,
         pin_memory=False,
+        persistent_workers=False
     )
     val_loader = DataLoader(
         val_dataset,
@@ -297,6 +298,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         shuffle=False,
         num_workers=0,  # could also be set to NUM_WORKERS, but I had some problems with the val loader stopping sometimes when num_workers != 0
         pin_memory=False,
+        persistent_workers=False
     )
 
     return train_loader, val_loader
@@ -350,18 +352,20 @@ def get_transforms(dataset: str):
 
 def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     def tokenize_function(example):
-        phrases = example["bbox_phrases"]  # List[str]
+        phrases = example["reference_report"]  # (str)  - make List[str]?
         bos_token = "<|endoftext|>"  # note: in the GPT2 tokenizer, bos_token = eos_token = "<|endoftext|>"
         eos_token = "<|endoftext|>"
 
-        phrases_with_special_tokens = [bos_token + phrase + eos_token for phrase in phrases]
+        phrases_with_special_tokens = [bos_token + phrases + eos_token]
 
         # the tokenizer will return input_ids of type List[List[int]] and attention_mask of type List[List[int]]
         return tokenizer(phrases_with_special_tokens, truncation=True, max_length=1024)
 
     tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
-
+    print(tokenized_train_dataset["input_ids"][0])
+    print(tokenized_train_dataset["attention_mask"][0])
+    print(tokenized_train_dataset["reference_report"][0])
     # tokenized datasets will consist of the columns
     #   - mimic_image_file_path (str)
     #   - bbox_coordinates (List[List[int]])
@@ -389,29 +393,13 @@ def get_tokenizer():
 def get_datasets(config_file_path):
     usecols = [
         "mimic_image_file_path",
-        "bbox_coordinates",
-        "bbox_labels",
-        "bbox_phrases",
-        "bbox_phrase_exists",
-        "bbox_is_abnormal",
+        "reference_report",
     ]
 
-    # all of the columns below are stored as strings in the csv_file
-    # however, as they are actually lists, we apply the literal_eval func to convert them to lists
-    converters = {
-        "bbox_coordinates": literal_eval,
-        "bbox_labels": literal_eval,
-        "bbox_phrases": literal_eval,
-        "bbox_phrase_exists": literal_eval,
-        "bbox_is_abnormal": literal_eval,
-    }
-
     datasets_as_dfs = {}
-    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train.csv"), usecols=usecols)
 
-    # val dataset has additional "reference_report" column
-    usecols.append("reference_report")
-    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols)
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])

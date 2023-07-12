@@ -42,13 +42,15 @@ import csv
 import json
 import logging
 import os
+import torch
+from tqdm import tqdm
 import re
 
 import imagesize
 import spacy
-import torch
-from tqdm import tqdm
 
+import sys
+sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 import src.dataset.section_parser as sp
 from src.path_datasets_and_weights import path_chest_imagenome, path_mimic_cxr, path_mimic_cxr_jpg, path_full_dataset
@@ -94,8 +96,8 @@ def write_stats_to_log_file(
 def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
-    if dataset == "test":
-        csv_rows, csv_rows_less_than_29_regions = csv_rows
+    """ if dataset == "test":
+        csv_rows, csv_rows_less_than_29_regions = csv_rows """
 
     new_csv_file_path = os.path.join(path_full_dataset, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
@@ -113,13 +115,13 @@ def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
 
     # for the test set, we put all images that do not have bbox coordinates (and corresponding bbox labels) for all 29 regions
     # into a 2nd csv file called test-2.csv
-    if dataset == "test":
+    """ if dataset == "test":
         new_csv_file_path = new_csv_file_path.replace(".csv", "-2.csv")
 
         with open(new_csv_file_path, "w") as fp:
             csv_writer = csv.writer(fp)
             csv_writer.writerow(header)
-            csv_writer.writerows(csv_rows_less_than_29_regions)
+            csv_writer.writerows(csv_rows_less_than_29_regions) """
 
 
 def check_coordinate(coordinate: int, dim: int) -> int:
@@ -319,7 +321,7 @@ def get_reference_report(subject_id: str, study_id: str, missing_reports: list[s
 
     # remove unnecessary whitespaces
     report = " ".join(report.split())
-
+    #print("report found")
     return report
 
 
@@ -367,7 +369,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
         csv_rows_less_than_29_regions = []
 
     total_num_rows = get_total_num_rows(path_csv_file)
-
+    print(total_num_rows)
     # used in function convert_phrases_to_single_string
     sentence_tokenizer = spacy.load("en_core_web_trf")
 
@@ -386,6 +388,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
 
         # iterate over all rows of the given csv file (i.e. over all images), if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is not set to a specific value
         for row in tqdm(csv_reader, total=total_num_rows):
+            
             subject_id = row[1]
             study_id = row[2]
             image_id = row[3]
@@ -419,10 +422,10 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             # just before new_image_row itself is appended to csv_rows (because the image could still be rejected from the validation set,
             # if it doesn't have 29 bbox coordinates)
 
-            chest_imagenome_scene_graph_file_path = os.path.join(path_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
+            #chest_imagenome_scene_graph_file_path = os.path.join(path_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
-            with open(chest_imagenome_scene_graph_file_path) as fp:
-                image_scene_graph = json.load(fp)
+            #with open(chest_imagenome_scene_graph_file_path) as fp:
+            #    image_scene_graph = json.load(fp)
 
             # get the attributes specified for the specific image in its image_scene_graph
             # the attributes contain (among other things) phrases used in the reference report to describe different bbox regions and
@@ -431,106 +434,24 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
             # 1. (normalized) phrases, which is a single string that contains the phrases used to describe the region inside the bbox
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
-            anatomical_region_attributes = get_attributes_dict(image_scene_graph, sentence_tokenizer)
+            #anatomical_region_attributes = get_attributes_dict(image_scene_graph, sentence_tokenizer)
 
             # new_image_row will store all information about 1 image as a row in the csv file
             new_image_row = [subject_id, study_id, image_id, mimic_image_file_path]
-            """ bbox_coordinates = []
-            bbox_labels = []
-            bbox_phrases = []
-            bbox_phrase_exist_vars = []
-            bbox_is_abnormal_vars = []
-
-            width, height = imagesize.get(mimic_image_file_path)
-
-            # counter to see if given image contains bbox coordinates for all 29 regions
-            # if image does not bbox coordinates for 29 regions, it's still added to the train and test dataset,
-            # but not the val dataset (see reasoning in the module docstring on top of this file)
-            num_regions = 0
-
-            region_to_bbox_coordinates_dict = {}
-            # objects is a list of obj_dicts where each dict contains the bbox coordinates for a single region
-            for obj_dict in image_scene_graph["objects"]:
-                region_name = obj_dict["bbox_name"]
-                x1 = obj_dict["original_x1"]
-                y1 = obj_dict["original_y1"]
-                x2 = obj_dict["original_x2"]
-                y2 = obj_dict["original_y2"]
-
-                region_to_bbox_coordinates_dict[region_name] = [x1, y1, x2, y2]
-
-            for anatomical_region in ANATOMICAL_REGIONS:
-                bbox_coords = region_to_bbox_coordinates_dict.get(anatomical_region, None)
-
-                # if there are no bbox coordinates or they are faulty, then don't add them to image information
-                if bbox_coords is None or coordinates_faulty(height, width, *bbox_coords):
-                    num_faulty_bboxes += 1
-                else:
-                    x1, y1, x2, y2 = bbox_coords
-
-                    # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
-                    # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
-                    # and set to height if y-coordinate > height
-                    x1 = check_coordinate(x1, width)
-                    y1 = check_coordinate(y1, height)
-                    x2 = check_coordinate(x2, width)
-                    y2 = check_coordinate(y2, height)
-
-                    bbox_coords = [x1, y1, x2, y2]
-
-                    # since background has class label 0 for object detection, shift the remaining class labels by 1
-                    class_label = ANATOMICAL_REGIONS[anatomical_region] + 1
-
-                    bbox_coordinates.append(bbox_coords)
-                    bbox_labels.append(class_label)
-
-                    num_regions += 1
-
-                # get bbox_phrase (describing the region inside bbox) and bbox_is_abnormal boolean variable (indicating if region inside bbox is abnormal)
-                # if there is no phrase, then the region inside bbox is normal and thus has "" for bbox_phrase (empty phrase) and False for bbox_is_abnormal
-                bbox_phrase, bbox_is_abnormal = anatomical_region_attributes.get(anatomical_region, ("", False))
-                bbox_phrase_exist = True if bbox_phrase != "" else False
-
-                bbox_phrases.append(bbox_phrase)
-                bbox_phrase_exist_vars.append(bbox_phrase_exist)
-                bbox_is_abnormal_vars.append(bbox_is_abnormal)
-
-            new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
-
-            # for train set, add all images (even those that don't have bbox information for all 29 regions)
-            # for val set, only add images that have bbox information for all 29 regions
-            # for test set, distinguish between test set 1 that contains test set images that have bbox information for all 29 regions
-            # (around 95% of all test set images)
-            if dataset == "train" or (dataset in ["valid", "test"] and num_regions == 29):
-                if dataset in ["valid", "test"]:
-                    new_image_row.append(reference_report)
-
-                csv_rows.append(new_image_row)
-
-                num_rows_created += 1
-            """
+           
             new_image_row.append(reference_report)
+            #print(new_image_row)
             csv_rows.append(new_image_row)
             num_rows_created += 1
             
-            # test set 2 will contain the remaining 5% of test set images, which do not have bbox information for all 29 regions
-            """elif dataset == "test" and num_regions != 29:
-                new_image_row.append(reference_report)
-                csv_rows_less_than_29_regions.append(new_image_row)
-
-            if num_regions != 29:
-                num_images_without_29_regions += 1
-            """
             # break out of loop if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is specified
             if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and num_rows_created >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
+                print(f"reached {NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES} images.")
                 break
 
     write_stats_to_log_file(dataset, num_images_ignored_or_avoided, missing_images, missing_reports, num_faulty_bboxes, num_images_without_29_regions)
 
-    if dataset == "test":
-        return csv_rows, csv_rows_less_than_29_regions
-    else:
-        return csv_rows
+    return csv_rows
 
 
 def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> None:

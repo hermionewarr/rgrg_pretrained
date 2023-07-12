@@ -30,12 +30,12 @@ class CustomDataset(Dataset):
             #bbox_phrase_exists = self.tokenized_dataset[index]["bbox_phrase_exists"]  # List[bool]
             #bbox_is_abnormal = self.tokenized_dataset[index]["bbox_is_abnormal"]  # List[bool]
 
-            if self.dataset_name != "train":
+            #if self.dataset_name != "train":
                 # we only need the reference phrases during evaluation when computing scores for metrics
                 #bbox_phrases = self.tokenized_dataset[index]["bbox_phrases"]  # List[str]
 
                 # same for the reference_report
-                reference_report = self.tokenized_dataset[index]["reference_report"]  # str
+            reference_report = self.tokenized_dataset[index]["reference_report"]  # str
 
             # cv2.imread by default loads an image with 3 channels
             # since we have grayscale images, we only have 1 channel and thus use cv2.IMREAD_UNCHANGED to read in the 1 channel
@@ -55,17 +55,18 @@ class CustomDataset(Dataset):
                 #"bbox_labels": torch.tensor(transformed_bbox_labels, dtype=torch.int64),
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
+                "reference_report" : reference_report,
                 #"bbox_phrase_exists": torch.tensor(bbox_phrase_exists, dtype=torch.bool),
                 #"bbox_is_abnormal": torch.tensor(bbox_is_abnormal, dtype=torch.bool),
             }
 
-            if self.dataset_name != "train":
+            #if self.dataset_name != "train":
                 #sample["bbox_phrases"] = bbox_phrases
-                sample["reference_report"] = reference_report
+            #    sample["reference_report"] = reference_report
 
         except Exception as e:
             self.log.error(f"__getitem__ failed for: {image_path}")
             self.log.error(f"Reason: {e}")
             return None
-
+        #print(sample)
         return sample

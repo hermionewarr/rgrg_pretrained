@@ -69,49 +69,6 @@ class ReportGenerationModel(nn.Module):
         del features
         return language_model_loss
                
-
-    def get_valid_decoder_input_for_training(
-        self,
-        class_detected,  # shape [batch_size x 29]
-        region_has_sentence,  # shape [batch_size x 29]
-        input_ids,  # shape [(batch_size * 29) x seq_len]
-        attention_mask,  # shape [(batch_size * 29) x seq_len]
-        region_features,  # shape [batch_size x 29 x 1024]
-    ):
-        """
-        We want to train the decoder only on region features (and corresponding input_ids/attention_mask) whose corresponding sentences are non-empty and
-        that were detected by the object detector.
-        """
-        # valid is of shape [batch_size x 29]
-        valid = torch.logical_and(class_detected, region_has_sentence)
-
-        # reshape to [(batch_size * 29)], such that we can apply the mask to input_ids and attention_mask
-        valid_reshaped = valid.reshape(-1)
-
-        valid_input_ids = input_ids[valid_reshaped]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]
-        valid_attention_mask = attention_mask[valid_reshaped]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]
-        valid_region_features = region_features[valid]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x 1024]
-
-        return valid_input_ids, valid_attention_mask, valid_region_features
-
-    def get_valid_decoder_input_for_evaluation(
-        self,
-        selected_regions,  # shape [batch_size x 29]
-        input_ids,  # shape [(batch_size * 29) x seq_len]
-        attention_mask  # shape [(batch_size * 29) x seq_len]
-    ):
-        """
-        For evaluation, we want to evaluate the decoder on the top_region_features selected by the classifier to get a sentence generated.
-        We also have to get the corresponding input_ids and attention_mask accordingly.
-        """
-        # reshape to [(batch_size * 29)]
-        selected_regions = selected_regions.reshape(-1)
-
-        valid_input_ids = input_ids[selected_regions]  # of shape [num_regions_selected_in_batch x seq_len]
-        valid_attention_mask = attention_mask[selected_regions]  # of shape [num_regions_selected_in_batch x seq_len]
-
-        return valid_input_ids, valid_attention_mask
-
     @torch.no_grad()
     def generate(
         self,
@@ -164,7 +121,7 @@ class ReportGenerationModel(nn.Module):
             return -1
 """
         # output_ids of shape (num_regions_selected_in_batch x longest_generated_sequence_length)
-        output_ids = self.language_model.genlanguage_model_losserate(
+        output_ids = self.language_model.generate(
             features,
             max_length,
             num_beams,

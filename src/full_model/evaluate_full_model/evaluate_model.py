@@ -138,121 +138,6 @@ def write_all_losses_and_scores_to_tensorboard(
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
 
-
-def update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected):
-    """
-    Args:
-        region_abnormal_scores (Dict)
-        predicted_abnormal_regions (Tensor[bool]): shape [batch_size x 29]
-        region_is_abnormal (Tensor[bool]): shape [batch_size x 29]
-        class_detected (Tensor[bool]): shape [batch_size x 29]
-
-    We only update/compute the scores for regions that were actually detected by the object detector (specified by class_detected).
-    """
-    detected_predicted_abnormal_regions = predicted_abnormal_regions[class_detected]
-    detected_region_is_abnormal = region_is_abnormal[class_detected]
-
-    region_abnormal_scores["precision"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
-    region_abnormal_scores["recall"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
-    region_abnormal_scores["f1"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
-
-
-def update_region_selection_metrics(region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal):
-    """
-    Args:
-        region_selection_scores (Dict[str, Dict])
-        selected_regions (Tensor[bool]): shape [batch_size x 29]
-        region_has_sentence (Tensor[bool]): shape [batch_size x 29]
-        region_is_abnormal (Tensor[bool]): shape [batch_size x 29]
-    """
-    normal_selected_regions = selected_regions[~region_is_abnormal]
-    normal_region_has_sentence = region_has_sentence[~region_is_abnormal]
-
-    abnormal_selected_regions = selected_regions[region_is_abnormal]
-    abnormal_region_has_sentence = region_has_sentence[region_is_abnormal]
-
-    region_selection_scores["all"]["precision"](selected_regions.reshape(-1), region_has_sentence.reshape(-1))
-    region_selection_scores["all"]["recall"](selected_regions.reshape(-1), region_has_sentence.reshape(-1))
-    region_selection_scores["all"]["f1"](selected_regions.reshape(-1), region_has_sentence.reshape(-1))
-
-    region_selection_scores["normal"]["precision"](normal_selected_regions, normal_region_has_sentence)
-    region_selection_scores["normal"]["recall"](normal_selected_regions, normal_region_has_sentence)
-    region_selection_scores["normal"]["f1"](normal_selected_regions, normal_region_has_sentence)
-
-    region_selection_scores["abnormal"]["precision"](abnormal_selected_regions, abnormal_region_has_sentence)
-    region_selection_scores["abnormal"]["recall"](abnormal_selected_regions, abnormal_region_has_sentence)
-    region_selection_scores["abnormal"]["f1"](abnormal_selected_regions, abnormal_region_has_sentence)
-
-
-def update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected):
-    def compute_box_area(box):
-        """
-        Calculate the area of a box given the 4 corner values.
-
-        Args:
-            box (Tensor[batch_size x 29 x 4])
-
-        Returns:
-            area (Tensor[batch_size x 29])
-        """
-        x0 = box[..., 0]
-        y0 = box[..., 1]
-        x1 = box[..., 2]
-        y1 = box[..., 3]
-
-        return (x1 - x0) * (y1 - y0)
-
-    def compute_intersection_and_union_area_per_region(detections, targets, class_detected):
-        # pred_boxes is of shape [batch_size x 29 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
-        # they are sorted in the 2nd dimension, meaning the 1st of the 29 boxes corresponds to the 1st region/class,
-        # the 2nd to the 2nd class and so on
-        pred_boxes = detections["top_region_boxes"]
-
-        # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
-        # gt_boxes is of shape [batch_size x 29 x 4]
-        gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
-
-        # below tensors are of shape [batch_size x 29]
-        x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
-        y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
-        x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
-        y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
-
-        # intersection_boxes is of shape [batch_size x 29 x 4]
-        intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
-
-        # below tensors are of shape [batch_size x 29]
-        intersection_area = compute_box_area(intersection_boxes)
-        pred_area = compute_box_area(pred_boxes)
-        gt_area = compute_box_area(gt_boxes)
-
-        # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
-        valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
-
-        # also there is no intersection if the class was not detected by object detector
-        valid_intersection = torch.logical_and(valid_intersection, class_detected)
-
-        # set all non-valid intersection areas to 0
-        intersection_area[~valid_intersection] = 0
-
-        union_area = (pred_area + gt_area) - intersection_area
-
-        # sum up the values along the batch dimension (the values will divided by each other later to get the averages)
-        intersection_area = torch.sum(intersection_area, dim=0)
-        union_area = torch.sum(union_area, dim=0)
-
-        return intersection_area, union_area
-
-    # sum up detections for each region
-    region_detected_batch = torch.sum(class_detected, dim=0)
-
-    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(detections, image_targets, class_detected)
-
-    obj_detector_scores["sum_region_detected"] += region_detected_batch
-    obj_detector_scores["sum_intersection_area_per_region"] += intersection_area_per_region_batch
-    obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
-
-
 def get_val_losses(model, val_dl, log_file, epoch):
     """
     Args:
@@ -270,10 +155,6 @@ def get_val_losses(model, val_dl, log_file, epoch):
         "total_loss": 0.0
     }
 
-    if not PRETRAIN_WITHOUT_LM_MODEL:
-        val_losses_dict["language_model_loss"] = 0.0
-
-    
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
@@ -289,20 +170,16 @@ def get_val_losses(model, val_dl, log_file, epoch):
             num_images += batch_size
 
             images = images.to(device, non_blocking=True)
-            
-            if not PRETRAIN_WITHOUT_LM_MODEL:
-                input_ids = batch["input_ids"]
-                attention_mask = batch["attention_mask"]
+            input_ids = batch["input_ids"]
+            attention_mask = batch["attention_mask"]
 
-                input_ids = input_ids.to(device, non_blocking=True)
-                attention_mask = attention_mask.to(device, non_blocking=True)
-            else:
-                input_ids = None
-                attention_mask = None
+            input_ids = input_ids.to(device, non_blocking=True)
+            attention_mask = attention_mask.to(device, non_blocking=True)
 
             try:
                 with torch.autocast(device_type='cuda', dtype=torch.float16):
                     output = model(images, input_ids, attention_mask)
+            
             except RuntimeError as e:  # out of memory error
                 if "out of memory" in str(e):
                     oom = True
@@ -318,9 +195,7 @@ def get_val_losses(model, val_dl, log_file, epoch):
                 # free up memory
                 torch.cuda.empty_cache()
                 oom = False
-
                 num_images -= batch_size
-
                 continue
 
             # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
@@ -332,17 +207,14 @@ def get_val_losses(model, val_dl, log_file, epoch):
                 num_images -= batch_size
 
                 continue
-            language_model_loss = output
 
-            total_loss =  language_model_loss
-
+            total_loss =  output
             val_losses_dict["total_loss"] += total_loss
-
             steps_taken += 1
 
-    """# normalize the val losses by steps_taken
+    # normalize the val losses by steps_taken
     for loss_type in val_losses_dict:
-        val_losses_dict["total_loss"] /= steps_taken """
+        val_losses_dict["total_loss"] /= steps_taken
 
     return val_losses_dict
 
