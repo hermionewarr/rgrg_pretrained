@@ -286,8 +286,8 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=NUM_WORKERS,
-        #worker_init_fn=seed_worker, #fixes the num workers error.
-        generator=g,
+        #worker_init_fn=seed_worker, #fixes the num workers error. no
+        #generator=g,
         pin_memory=False,
         persistent_workers=False
     )
@@ -359,7 +359,7 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
         phrases_with_special_tokens = [bos_token + phrases + eos_token]
 
         # the tokenizer will return input_ids of type List[List[int]] and attention_mask of type List[List[int]]
-        return tokenizer(phrases_with_special_tokens, truncation=True, max_length=1024)
+        return tokenizer(phrases_with_special_tokens, truncation=True, max_length=512)#1024
 
     tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)

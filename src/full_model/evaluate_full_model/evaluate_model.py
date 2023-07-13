@@ -213,8 +213,7 @@ def get_val_losses(model, val_dl, log_file, epoch):
             steps_taken += 1
 
     # normalize the val losses by steps_taken
-    for loss_type in val_losses_dict:
-        val_losses_dict["total_loss"] /= steps_taken
+    val_losses_dict["total_loss"] /= steps_taken
 
     return val_losses_dict
 
@@ -235,7 +234,8 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
  
     # the language model will generate gibberish in the beginning, so no need to evaluate it for first 100000 steps
     # (you may need to change this number based on the batch size you use, we used a small batch size of 2 for resource constraints)
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100: #100000
+    if epoch > 3: #100000
+        print("steps:", overall_steps_taken)
         language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path)
     else:
         language_model_scores = None

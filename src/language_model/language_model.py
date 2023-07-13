@@ -446,13 +446,14 @@ class LanguageModel(nn.Module):
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
-
-            return self.greedy_search(
+            greedy_search_output = self.greedy_search(
                 input_ids,
                 image_hidden_states,
                 max_length,
                 **model_kwargs
             )
+            return greedy_search_output
+        
         elif is_sample_gen_mode:
             raise NotImplementedError("Multinomial sampling is not implemented.")
         elif is_beam_gen_mode:
@@ -473,14 +474,14 @@ class LanguageModel(nn.Module):
 
             # interleave input_ids with 'num_beams' additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(input_ids, expand_size=num_beams, **model_kwargs)
-
-            return self.beam_search(
+            beam_search_output = self.beam_search(
                 input_ids,
                 image_hidden_states,
                 max_length,
                 beam_scorer,
                 **model_kwargs,
             )
+            return beam_search_output
         elif is_beam_sample_gen_mode:
             raise NotImplementedError("Beam-search multinomial sampling is not implemented.")
         elif is_group_beam_gen_mode:

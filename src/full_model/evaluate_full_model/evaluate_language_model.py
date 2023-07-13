@@ -319,111 +319,7 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
     compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports)
 
 
-def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
-
-    def compute_sentence_level_scores():
-        def remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents, ref_sents):
-            """
-            We can't compute scores on generated sentences whose corresponding reference sentence is empty.
-            So we need to discard them both.
-            """
-            filtered_gen_sents = []
-            filtered_ref_sents = []
-
-            for gen_sent, ref_sent in zip(gen_sents, ref_sents):
-                if ref_sent != "":
-                    filtered_gen_sents.append(gen_sent)
-                    filtered_ref_sents.append(ref_sent)
-
-            return filtered_gen_sents, filtered_ref_sents
-
-        def compute_sent_level_scores_for_subset(subset, gen_sents, ref_sents):
-            nlg_metrics = ["meteor"]
-            nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
-            meteor_score = nlg_scores["meteor"]
-            language_model_scores[subset]["meteor"] = meteor_score
-
-        def compute_sent_level_scores_for_region(region_name, gen_sents, ref_sents):
-            nlg_metrics = ["meteor"]
-            nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
-            meteor_score = nlg_scores["meteor"]
-            language_model_scores["region"][region_name]["meteor"] = meteor_score
-
-        def compute_sent_level_meteor_ratio_score(gen_sents, ref_sents):
-            """
-            We want to compute the ratio of the meteor scores for when:
-            - a generated sentence is paired with its corresponding reference sentence of a given image (value for the numerator)
-            vs
-            - a generated sentence is paired with all other non-corresponding reference sentences of a given image (value for the denominator)
-
-            the numerator value is already computed by language_model_scores["all"]["meteor"], since this is exactly the meteor score for when the generated sentences
-            are paried with their corresponding reference sentences. Hence only the denominator value has to be calculated separately
-            """
-            gen_sents_for_computing_meteor_ratio_score = []
-            ref_sents_for_computing_meteor_ratio_score = []
-
-            # List[int] that can be used to get all generated and reference sentences that correspond to the same image
-            num_generated_sentences_per_image = gen_and_ref_sentences["num_generated_sentences_per_image"]
-
-            curr_index = 0
-            for num_gen_sents in num_generated_sentences_per_image:
-                gen_sents_single_image = gen_sents[curr_index:curr_index + num_gen_sents]
-                ref_sents_single_image = ref_sents[curr_index:curr_index + num_gen_sents]
-                # the number of generated sentences per image is exactly the same as the number of "retrieved" reference sentences per image
-                # (see function get_ref_sentences_for_selected_regions)
-
-                curr_index += num_gen_sents
-
-                gen_sents_single_image_filtered, ref_sents_single_image_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents_single_image, ref_sents_single_image)
-
-                # now that we have the generated and (non-empty) reference sentences for a single image,
-                # we have to pair-wise match them except for the "correct" match between the corresponding gen and ref sents (see doc string of this function)
-                for i, gen_sent in enumerate(gen_sents_single_image_filtered):
-                    for j, ref_sent in enumerate(ref_sents_single_image_filtered):
-                        if i == j:
-                            continue  # skip "correct" match
-                        else:
-                            gen_sents_for_computing_meteor_ratio_score.append(gen_sent)
-                            ref_sents_for_computing_meteor_ratio_score.append(ref_sent)
-
-            # compute the "denominator" meteor score
-            nlg_metrics = ["meteor"]
-            nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents_for_computing_meteor_ratio_score, ref_sents_for_computing_meteor_ratio_score)
-            denominator_meteor_score = nlg_scores["meteor"]
-
-            numerator_meteor_score = language_model_scores["all"]["meteor"]
-
-            language_model_scores["all"]["meteor_ratio"] = numerator_meteor_score / denominator_meteor_score
-
-        generated_sents = gen_and_ref_sentences["generated_sentences"]
-        generated_sents_normal = gen_and_ref_sentences["generated_sentences_normal_selected_regions"]
-        generated_sents_abnormal = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"]
-
-        reference_sents = gen_and_ref_sentences["reference_sentences"]
-        reference_sents_normal = gen_and_ref_sentences["reference_sentences_normal_selected_regions"]
-        reference_sents_abnormal = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"]
-
-        gen_sents_filtered, ref_sents_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents, reference_sents)
-        gen_sents_normal_filtered, ref_sents_normal_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents_normal, reference_sents_normal)
-        gen_sents_abnormal_filtered, ref_sents_abnormal_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents_abnormal, reference_sents_abnormal)
-
-        compute_sent_level_scores_for_subset("all", gen_sents_filtered, ref_sents_filtered)
-        compute_sent_level_scores_for_subset("normal", gen_sents_normal_filtered, ref_sents_normal_filtered)
-        compute_sent_level_scores_for_subset("abnormal", gen_sents_abnormal_filtered, ref_sents_abnormal_filtered)
-
-        compute_sent_level_meteor_ratio_score(generated_sents, reference_sents)
-
-        for region_index, region_name in enumerate(ANATOMICAL_REGIONS):
-            region_generated_sentences = gen_and_ref_sentences[region_index]["generated_sentences"]
-            region_reference_sentences = gen_and_ref_sentences[region_index]["reference_sentences"]
-
-            region_gen_sents_filtered, region_ref_sents_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(region_generated_sentences, region_reference_sentences)
-
-            if len(region_gen_sents_filtered) != 0:
-                compute_sent_level_scores_for_region(region_name, region_gen_sents_filtered, region_ref_sents_filtered)
-            else:
-                language_model_scores["region"][region_name]["meteor"] = -1
-
+def compute_language_model_scores(gen_and_ref_reports):
     def compute_report_level_scores():
         gen_reports = gen_and_ref_reports["generated_reports"]
         ref_reports = gen_and_ref_reports["reference_reports"]
@@ -479,51 +375,22 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         language_model_scores["report"]["CE"]["f1_example_all"] = None
         language_model_scores["report"]["CE"]["acc_example_all"] = None
 
-        # on sentence-level, we only evaluate on METEOR, since this metric gives meaningful scores on sentence-level (as opposed to e.g. BLEU)
-        # we distinguish between generated sentences for all, normal, and abnormal regions
-        for subset in ["all", "normal", "abnormal"]:
-            language_model_scores[subset] = {"meteor": None}
-
-        # we also compute these scores for each region individually
-        language_model_scores["region"] = {}
-        for region_name in ANATOMICAL_REGIONS:
-            language_model_scores["region"][region_name] = {"meteor": None}
-
-        # and finally, on sentence-level we also compute the ratio of the meteor scores for when:
-        #   - a generated sentence is paired with its corresponding reference sentence of a given image (value for the numerator)
-        #   vs
-        #   - a generated sentence is paired with all other non-corresponding reference sentences of a given image (value for the denominator)
-        #
-        # the numerator value is already computed by language_model_scores["all"]["meteor"], since this is exactly the meteor score for when the generated sentences
-        # are paired with their corresponding reference sentences. Hence only the denominator value has to be calculated separately
-        language_model_scores["all"]["meteor_ratio"] = None
-
         return language_model_scores
 
     language_model_scores = create_language_model_scores_dict()
 
     compute_report_level_scores()
-    compute_sentence_level_scores()
 
     return language_model_scores
 
 
 def write_sentences_and_reports_to_file(
-    gen_and_ref_sentences,
+    #gen_and_ref_sentences,
     gen_and_ref_reports,
     #gen_sentences_with_corresponding_regions,
     generated_sentences_and_reports_folder_path,
     overall_steps_taken,
 ):
-    def write_sentences():
-        txt_file_name = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences", f"generated_sentences_step_{overall_steps_taken}")
-        #txt_file_name_abnormal = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences", f"generated_abnormal_sentences_step_{overall_steps_taken}")
-
-        with open(txt_file_name, "w") as f:
-            for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
-                f.write(f"Generated sentence: {gen_sent}\n")
-                f.write(f"Reference sentence: {ref_sent}\n\n")
-
     def write_reports():
         txt_file_name = os.path.join(
             generated_sentences_and_reports_folder_path,
@@ -532,44 +399,26 @@ def write_sentences_and_reports_to_file(
         )
 
         with open(txt_file_name, "w") as f:
-            for gen_report, ref_report, removed_similar_gen_sents, gen_sents_with_regions_single_report in zip(
+            for id, gen_report, ref_report in zip(
+                scan_id,
                 generated_reports,
                 reference_reports,
-                removed_similar_generated_sentences,
-                gen_sentences_with_corresponding_regions
             ):
+                f.write(f"Scan ID: {id}\n\n")
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
-
-                f.write("Generated sentences with their regions:\n")
-                for region_name, gen_sent in gen_sents_with_regions_single_report:
-                    f.write(f"\t{region_name}: {gen_sent}\n")
-                f.write("\n")
-
-                f.write("Generated sentences that were removed:\n")
-                for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
-                    f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
-                f.write("\n")
 
                 f.write("=" * 30)
                 f.write("\n\n")
 
-    num_generated_sentences_to_save = NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE * BATCH_SIZE
+    
     num_generated_reports_to_save = NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE
 
-    # all below are list of str
-    generated_sentences = gen_and_ref_sentences["generated_sentences"][:num_generated_sentences_to_save]
-    #generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
-    reference_sentences = gen_and_ref_sentences["reference_sentences"][:num_generated_sentences_to_save]
-    #reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
-
-    write_sentences()
-
     # all below are list of str except removed_similar_generated_sentences which is a list of dict
+    scan_id = gen_and_ref_reports["scan_id"][:num_generated_reports_to_save]
     generated_reports = gen_and_ref_reports["generated_reports"][:num_generated_reports_to_save]
     reference_reports = gen_and_ref_reports["reference_reports"][:num_generated_reports_to_save]
-    removed_similar_generated_sentences = gen_and_ref_reports["removed_similar_generated_sentences"][:num_generated_reports_to_save]
-
+    
     write_reports()
 
 
@@ -787,28 +636,18 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     # the list under the key "num_generated_sentences_per_image" will hold integers that represent how many sentences were generated for each image
     # this is useful to be able to get all generated and reference sentences that correspond to the same image
     # (since we append all generated and reference sentences to the "generated_sentences" and "reference_sentences" lists indiscriminately, this information would be lost otherwise)
-    gen_and_ref_sentences = {
+    """gen_and_ref_sentences = { #dunno if need this but maybe if we want to remove identicle sentences though given we are not genrerating on a per region basis we should be ok. 
         "generated_sentences": [],
-        "generated_sentences_normal_selected_regions": [],
-        "generated_sentences_abnormal_selected_regions": [],
         "reference_sentences": [],
-        "reference_sentences_normal_selected_regions": [],
-        "reference_sentences_abnormal_selected_regions": [],
         "num_generated_sentences_per_image": []
-    }
-
-    # also save the generated and reference sentences on a per region basis
-    for region_index, _ in enumerate(ANATOMICAL_REGIONS):
-        gen_and_ref_sentences[region_index] = {
-            "generated_sentences": [],
-            "reference_sentences": []
-        }
+    }"""
 
     # and of course the generated and reference reports, and additionally keep track of the generated sentences
     # that were removed because they were too similar to other generated sentences (only as a sanity-check/for writing to file)
     gen_and_ref_reports = {
+        "scan_ids" : [],
         "generated_reports": [],
-        "removed_similar_generated_sentences": [],
+        #"removed_similar_generated_sentences": [],
         "reference_reports": [],
     }
 
@@ -820,10 +659,10 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     # gen_sentences_with_corresponding_regions will be used such that each generated sentences in a generated report can be directly attributed to a region
     # because this information gets lost when we concatenated generated sentences
     # this is only used to get more insights into the generated reports that are written to file
-    gen_sentences_with_corresponding_regions = []
+    #gen_sentences_with_corresponding_regions = []
 
     # we also want to plot a couple of images
-    num_batches_to_process_for_image_plotting = NUM_IMAGES_TO_PLOT // BATCH_SIZE
+    #num_batches_to_process_for_image_plotting = NUM_IMAGES_TO_PLOT // BATCH_SIZE
 
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
@@ -838,11 +677,11 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 break
 
             images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
-            image_targets = batch["image_targets"]
+            #image_targets = batch["image_targets"]
             #region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 29]
-
+            scan_ids = batch["mimic_image_file_path"]
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
-            reference_sentences = batch["reference_sentences"]
+            #reference_sentences = batch["reference_sentences"]
 
             # List[str] that holds the reference report for the images in the batch
             reference_reports = batch["reference_reports"]
@@ -852,7 +691,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                     output = model.generate(
                         images.to(device, non_blocking=True),
                         max_length=MAX_NUM_TOKENS_GENERATE,
-                        #num_beams=NUM_BEAMS,
+                        num_beams=NUM_BEAMS,
                         early_stopping=True,
                     )
             except RuntimeError as e:  # out of memory error
@@ -873,81 +712,49 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 continue
 
             # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
-            if output == -1:
-                with open(log_file, "a") as f:
-                    f.write("Generation:\n")
-                    f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
-
-                continue
-            else:
-                # selected_regions is of shape [batch_size x 29] and is True for regions that should get a sentence
-                beam_search_output, selected_regions, detections, class_detected = output
-                selected_regions = selected_regions.detach().cpu().numpy()
+            # selected_regions is of shape [batch_size x 29] and is True for regions that should get a sentence
+            beam_search_output = output
+            #selected_regions = selected_regions.detach().cpu().numpy()
 
             # generated_sents_for_selected_regions is a List[str] of length "num_regions_selected_in_batch"
-            generated_sents_for_selected_regions = tokenizer.batch_decode(
+            generated_reports = tokenizer.batch_decode(
                 beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True
             )
 
             # filter reference_sentences to those that correspond to the generated_sentences for the selected regions.
             # reference_sents_for_selected_regions will therefore be a List[str] of length "num_regions_selected_in_batch"
             # (i.e. same length as generated_sents_for_selected_regions)
-            reference_sents_for_selected_regions = get_ref_sentences_for_selected_regions(
-                reference_sentences, selected_regions
-            )
-
-            (
-                gen_sents_for_normal_selected_regions,
-                gen_sents_for_abnormal_selected_regions,
-                ref_sents_for_normal_selected_regions,
-                ref_sents_for_abnormal_selected_regions,
-            ) = get_sents_for_normal_abnormal_selected_regions(region_is_abnormal, selected_regions, generated_sents_for_selected_regions, reference_sents_for_selected_regions)
-
-            generated_reports, removed_similar_generated_sentences = get_generated_reports(
-                generated_sents_for_selected_regions,
-                selected_regions,
+           
+            """generated_reports, removed_similar_generated_sentences = get_generated_reports(
+                generated_reports
                 sentence_tokenizer,
                 BERTSCORE_SIMILARITY_THRESHOLD
-            )
-
-            gen_and_ref_sentences["generated_sentences"].extend(generated_sents_for_selected_regions)
-            gen_and_ref_sentences["generated_sentences_normal_selected_regions"].extend(gen_sents_for_normal_selected_regions)
-            gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(gen_sents_for_abnormal_selected_regions)
-            gen_and_ref_sentences["reference_sentences"].extend(reference_sents_for_selected_regions)
-            gen_and_ref_sentences["reference_sentences_normal_selected_regions"].extend(ref_sents_for_normal_selected_regions)
-            gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
+            )""" #come back to this
+            gen_and_ref_reports["scan_id"].extend(scan_ids)
             gen_and_ref_reports["generated_reports"].extend(generated_reports)
             gen_and_ref_reports["reference_reports"].extend(reference_reports)
-            gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
+            #gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
 
-            update_gen_and_ref_sentences_for_regions(gen_and_ref_sentences, generated_sents_for_selected_regions, reference_sents_for_selected_regions, selected_regions)
-            update_num_generated_sentences_per_image(gen_and_ref_sentences, selected_regions)
+            #if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
+            #    update_gen_sentences_with_corresponding_regions(gen_sentences_with_corresponding_regions, generated_sents_for_selected_regions)
 
-            if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
-                update_gen_sentences_with_corresponding_regions(gen_sentences_with_corresponding_regions, generated_sents_for_selected_regions, selected_regions)
-
-            if num_batch < num_batches_to_process_for_image_plotting:
+            """ if num_batch < num_batches_to_process_for_image_plotting:
                 plot_detections_and_sentences_to_tensorboard(
                     writer,
                     num_batch,
                     overall_steps_taken,
                     images,
                     image_targets,
-                    selected_regions,
-                    detections,
-                    class_detected,
-                    reference_sentences,
-                    generated_sents_for_selected_regions,
-                )
+                    reference_reports,
+                    generated_reports,
+                ) """
 
     write_sentences_and_reports_to_file(
-        gen_and_ref_sentences,
         gen_and_ref_reports,
-        gen_sentences_with_corresponding_regions,
         generated_sentences_and_reports_folder_path,
         overall_steps_taken,
     )
 
-    language_model_scores = compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports)
+    language_model_scores = compute_language_model_scores(gen_and_ref_reports)
 
     return language_model_scores
