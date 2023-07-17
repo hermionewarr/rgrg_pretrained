@@ -149,7 +149,7 @@ def train_model(
 
             #batch_size = images.size(0)
 
-            images = images.to(device, non_blocking=True)
+            images = images.to(device, non_blocking=False) #
             #image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
             #region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             #region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
@@ -157,8 +157,8 @@ def train_model(
             input_ids = batch["input_ids"]
             attention_mask = batch["attention_mask"]
 
-            input_ids = input_ids.to(device, non_blocking=True)
-            attention_mask = attention_mask.to(device, non_blocking=True)
+            input_ids = input_ids.to(device, non_blocking=False)
+            attention_mask = attention_mask.to(device, non_blocking=False) #, non_blocking=True
 
             try:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
@@ -190,10 +190,10 @@ def train_model(
                         f.write(f"Error message: {str(e)}\n\n")
                 else:
                     raise e
-
+            
             if oom:
                 # free up memory
-                print(torch.cuda.memory_summary())
+                #print(torch.cuda.memory_summary())
                 for p in model.parameters():
                     if p.grad is not None:
                         del p.grad
@@ -201,29 +201,23 @@ def train_model(
                 optimizer.zero_grad()
                 oom = False
                 continue
-
+            
             if (num_batch + 1) % ACCUMULATION_STEPS == 0:
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
 
-            list_of_losses = [
-                total_loss,
-            ]
-
-            if not PRETRAIN_WITHOUT_LM_MODEL:
-                list_of_losses.append(output)
-
             # dicts are insertion ordered since Python 3.7
             train_losses_dict["total_loss"] += total_loss
-
             run_params["steps_taken"] += 1
             run_params["overall_steps_taken"] += 1
-
+            
             # evaluate every k batches and at the end of each epoch
+            #EVALUATE_EVERY_K_BATCHES = 150
             if run_params["steps_taken"] >= EVALUATE_EVERY_K_BATCHES or (num_batch + 1) == len(train_dl):
-
+                #print("KOSTAS: EVALUATION GONNA HAPPEN, overall_steps_taken=", run_params["overall_steps_taken"])
                 log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
+                model.eval()
                 evaluate_model(
                     model,
                     train_losses_dict,
@@ -236,6 +230,7 @@ def train_model(
                     run_params,
                     generated_sentences_and_reports_folder_path
                 )
+                
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
                 # set the model back to training
@@ -258,7 +253,7 @@ def get_model(checkpoint=None):
     # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    model.to(device, non_blocking=True)
+    model.to(device, non_blocking=False)
 
     if checkpoint:
         model.load_state_dict(checkpoint["model"])
@@ -283,18 +278,18 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
     train_loader = DataLoader(
         train_dataset,
         collate_fn=custom_collate_train,
-        batch_size=BATCH_SIZE,
+        batch_size= BATCH_SIZE,
         shuffle=True,
         num_workers=NUM_WORKERS,
         #worker_init_fn=seed_worker, #fixes the num workers error. no
         #generator=g,
         pin_memory=False,
-        persistent_workers=False
+        persistent_workers=True
     )
     val_loader = DataLoader(
         val_dataset,
         collate_fn=custom_collate_val,
-        batch_size=BATCH_SIZE,
+        batch_size= BATCH_SIZE,
         shuffle=False,
         num_workers=0,  # could also be set to NUM_WORKERS, but I had some problems with the val loader stopping sometimes when num_workers != 0
         pin_memory=False,
@@ -397,9 +392,9 @@ def get_datasets(config_file_path):
     ]
 
     datasets_as_dfs = {}
-    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train.csv"), usecols=usecols)
+    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train_subset.csv"), usecols=usecols)
 
-    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols)
+    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid_subset.csv"), usecols=usecols)
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -416,8 +411,8 @@ def get_datasets(config_file_path):
         f.write(f"\tVAL NUM IMAGES: {new_num_samples_val}\n")
 
     # limit the datasets to those new numbers
-    datasets_as_dfs["train"] = datasets_as_dfs["train"][:new_num_samples_train]
-    datasets_as_dfs["valid"] = datasets_as_dfs["valid"][:new_num_samples_val]
+    datasets_as_dfs["train"] = datasets_as_dfs["train"].sample(n=new_num_samples_train, random_state=SEED) #[:new_num_samples_train]
+    datasets_as_dfs["valid"] = datasets_as_dfs["valid"].sample(n=new_num_samples_val, random_state=SEED)#[:new_num_samples_val]
 
     raw_train_dataset = Dataset.from_pandas(datasets_as_dfs["train"])
     raw_val_dataset = Dataset.from_pandas(datasets_as_dfs["valid"])

@@ -221,10 +221,10 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         preds_ref_reports_converted = convert_labels_like_miura(preds_ref_reports)
 
         # for the CE scores, we follow Miura (https://arxiv.org/pdf/2010.10042.pdf) in micro averaging them over these 5 conditions:
-        five_conditions_to_evaluate = {"Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"}
+        """five_conditions_to_evaluate = {"Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"}
 
         total_preds_gen_reports_5_conditions = []
-        total_preds_ref_reports_5_conditions = []
+        total_preds_ref_reports_5_conditions = [] """
 
         # we also compute the micro average over all 14 conditions:
         total_preds_gen_reports_14_conditions = []
@@ -232,9 +232,9 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
 
         # iterate over the 14 conditions
         for preds_gen_reports_condition, preds_ref_reports_condition, condition in zip(preds_gen_reports_converted, preds_ref_reports_converted, CONDITIONS):
-            if condition in five_conditions_to_evaluate:
+            """ if condition in five_conditions_to_evaluate:
                 total_preds_gen_reports_5_conditions.extend(preds_gen_reports_condition)
-                total_preds_ref_reports_5_conditions.extend(preds_ref_reports_condition)
+                total_preds_ref_reports_5_conditions.extend(preds_ref_reports_condition) """
 
             total_preds_gen_reports_14_conditions.extend(preds_gen_reports_condition)
             total_preds_ref_reports_14_conditions.extend(preds_ref_reports_condition)
@@ -258,13 +258,13 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         language_model_scores["report"]["CE"]["acc_all"] = acc
 
         # compute and save scores for the 5 conditions
-        precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions, average="binary")
+        """ precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions, average="binary")
         acc = accuracy_score(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions)
 
         language_model_scores["report"]["CE"]["precision_micro_5"] = precision
         language_model_scores["report"]["CE"]["recall_micro_5"] = recall
         language_model_scores["report"]["CE"]["f1_micro_5"] = f1
-        language_model_scores["report"]["CE"]["acc_5"] = acc
+        language_model_scores["report"]["CE"]["acc_5"] = acc """
 
     def compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports):
         """
@@ -313,13 +313,16 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         language_model_scores["report"]["CE"]["acc_example_all"] = acc_example
 
     chexbert = get_chexbert()
+    print("Get chexpert labels.")
     preds_gen_reports, preds_ref_reports = get_chexbert_labels_for_gen_and_ref_reports()
 
+    print("Compute CE scores.")
     compute_micro_average_CE_scores(preds_gen_reports, preds_ref_reports)
     compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports)
 
 
 def compute_language_model_scores(gen_and_ref_reports):
+    print("Computing language model scores..")
     def compute_report_level_scores():
         gen_reports = gen_and_ref_reports["generated_reports"]
         ref_reports = gen_and_ref_reports["reference_reports"]
@@ -385,12 +388,11 @@ def compute_language_model_scores(gen_and_ref_reports):
 
 
 def write_sentences_and_reports_to_file(
-    #gen_and_ref_sentences,
     gen_and_ref_reports,
-    #gen_sentences_with_corresponding_regions,
     generated_sentences_and_reports_folder_path,
     overall_steps_taken,
 ):
+    print("Writing example reports..")
     def write_reports():
         txt_file_name = os.path.join(
             generated_sentences_and_reports_folder_path,
@@ -399,12 +401,10 @@ def write_sentences_and_reports_to_file(
         )
 
         with open(txt_file_name, "w") as f:
-            for id, gen_report, ref_report in zip(
-                scan_id,
+            for gen_report, ref_report in zip(
                 generated_reports,
                 reference_reports,
             ):
-                f.write(f"Scan ID: {id}\n\n")
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
 
@@ -415,7 +415,6 @@ def write_sentences_and_reports_to_file(
     num_generated_reports_to_save = NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE
 
     # all below are list of str except removed_similar_generated_sentences which is a list of dict
-    scan_id = gen_and_ref_reports["scan_id"][:num_generated_reports_to_save]
     generated_reports = gen_and_ref_reports["generated_reports"][:num_generated_reports_to_save]
     reference_reports = gen_and_ref_reports["reference_reports"][:num_generated_reports_to_save]
     
@@ -679,7 +678,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
             images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
             #image_targets = batch["image_targets"]
             #region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 29]
-            scan_ids = batch["mimic_image_file_path"]
+            #scan_ids = batch["mimic_image_file_path"]
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
             #reference_sentences = batch["reference_sentences"]
 
@@ -730,7 +729,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 sentence_tokenizer,
                 BERTSCORE_SIMILARITY_THRESHOLD
             )""" #come back to this
-            gen_and_ref_reports["scan_id"].extend(scan_ids)
+            #gen_and_ref_reports["scan_id"].extend(scan_ids)
             gen_and_ref_reports["generated_reports"].extend(generated_reports)
             gen_and_ref_reports["reference_reports"].extend(reference_reports)
             #gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)

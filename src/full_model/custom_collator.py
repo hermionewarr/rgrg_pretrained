@@ -33,42 +33,10 @@ class CustomCollator:
         # create an empty list image_targets that will store dicts containing the bbox_coordinates and bbox_labels
         image_targets = []
         reference_reports = []
-        # allocate an empty tensor region_has_sentence that will store all bbox_phrase_exists tensors of the batch
-        #bbox_phrase_exists_size = batch[0]["bbox_phrase_exists"].size()  # should be torch.Size([29])
-        #region_has_sentence = torch.empty(size=(len(batch), *bbox_phrase_exists_size), dtype=torch.bool)
-
-        # allocate an empty tensor region_is_abnormal that will store all bbox_is_abnormal tensors of the batch
-        #bbox_is_abnormal_size = batch[0]["bbox_is_abnormal"].size()  # should be torch.Size([29])
-        #region_is_abnormal = torch.empty(size=(len(batch), *bbox_is_abnormal_size), dtype=torch.bool)
-
-        #if self.is_val_or_test and not self.pretrain_without_lm_model:
-            # for a validation and test batch, create a List[List[str]] that hold the reference phrases (i.e. bbox_phrases) to compute e.g. BLEU scores
-            # the inner list will hold all reference phrases for a single image
-            #bbox_phrases_batch = []
-
-            # also create a List[str] to hold the reference reports for the images in the batch
-            # reference_reports = []
 
         for i, sample_dict in enumerate(batch):
             # remove image tensors from batch and store them in dedicated images_batch tensor
             images_batch[i] = sample_dict.pop("image")
-
-            # remove bbox_coordinates and bbox_labels and store them in list image_targets
-            #boxes = sample_dict.pop("bbox_coordinates")
-            #labels = sample_dict.pop("bbox_labels")
-            #image_targets.append({"boxes": boxes, "labels": labels})
-
-            # remove bbox_phrase_exists tensors from batch and store them in dedicated region_has_sentence tensor
-            #region_has_sentence[i] = sample_dict.pop("bbox_phrase_exists")
-
-            # remove bbox_is_abnormal tensors from batch and store them in dedicated region_is_abnormal tensor
-            #region_is_abnormal[i] = sample_dict.pop("bbox_is_abnormal")
-
-            #if self.is_val_or_test and not self.pretrain_without_lm_model:
-                # remove list bbox_phrases from batch and store it in the list bbox_phrases_batch
-                #bbox_phrases_batch.append(sample_dict.pop("bbox_phrases"))
-
-                # same for reference_report
             reference_reports.append(sample_dict.pop("reference_report"))
 
         if self.pretrain_without_lm_model:
@@ -91,17 +59,10 @@ class CustomCollator:
 
             # treat dict_with_ii_and_am as the batch variable now (since it is a dict, and we can use it to store all the other keys as well)
             batch = dict_with_ii_and_am
-            #print(batch)
-            #print(batch.shape())
 
         # add the remaining keys and values to the batch dict
         batch["images"] = images_batch
         batch["image_targets"] = image_targets
-        #batch["region_has_sentence"] = region_has_sentence
-        #batch["region_is_abnormal"] = region_is_abnormal
-
-        #if self.is_val_or_test and not self.pretrain_without_lm_model:
-            #batch["reference_sentences"] = bbox_phrases_batch
         batch["reference_reports"] = reference_reports
 
         return batch

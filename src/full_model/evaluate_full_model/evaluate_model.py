@@ -40,9 +40,6 @@ def write_all_losses_and_scores_to_tensorboard(
     overall_steps_taken,
     train_losses_dict,
     val_losses_dict,
-    #obj_detector_scores,
-    #region_selection_scores,
-    #region_abnormal_scores,
     language_model_scores,
     current_lr
 ):
@@ -113,32 +110,25 @@ def write_all_losses_and_scores_to_tensorboard(
             - report: for all generated reports
             - region: for generated sentences per region
         """
-        for subset in language_model_scores:
-            if subset == "region":
-                for region_name in language_model_scores["region"]:
-                    for metric, score in language_model_scores["region"][region_name].items():
-                        # replace white space by underscore for region name (i.e. "right upper lung" -> "right_upper_lung")
-                        region_name_underscored = "_".join(region_name.split())
-                        writer.add_scalar(f"language_model/region/{region_name_underscored}/{metric}", score, overall_steps_taken)
-            else:
-                for metric, score in language_model_scores[subset].items():
-                    if metric == "CE":
-                        ce_score_dict = language_model_scores["report"]["CE"]
-                        write_clinical_efficacy_scores(ce_score_dict)
-                    else:
-                        writer.add_scalar(f"language_model/{subset}/{metric}", score, overall_steps_taken)
+        print(language_model_scores.keys())
+        #for subset in language_model_scores:
+        for metric, score in language_model_scores.items(): #[subset]
+                if metric == "CE":
+                    ce_score_dict = language_model_scores["report"]["CE"]
+                    write_clinical_efficacy_scores(ce_score_dict)
+                else:
+                    writer.add_scalar(f"language_model/{subset}/{metric}", score, overall_steps_taken)
 
     write_losses()
-    #write_obj_detector_scores()
-    #write_region_selection_scores()
-    #write_region_abnormal_scores()
 
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100000:
-        write_language_model_scores()
+    #if overall_steps_taken > 100000:
+    write_language_model_scores()
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
 
-def get_val_losses(model, val_dl, log_file, epoch):
+def get_val_losses(model, val_dl,
+                   log_file,
+                   epoch):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
@@ -169,12 +159,12 @@ def get_val_losses(model, val_dl, log_file, epoch):
             batch_size = images.size(0)
             num_images += batch_size
 
-            images = images.to(device, non_blocking=True)
+            images = images.to(device, non_blocking=False)
             input_ids = batch["input_ids"]
             attention_mask = batch["attention_mask"]
 
-            input_ids = input_ids.to(device, non_blocking=True)
-            attention_mask = attention_mask.to(device, non_blocking=True)
+            input_ids = input_ids.to(device, non_blocking=False)
+            attention_mask = attention_mask.to(device, non_blocking=False)
 
             try:
                 with torch.autocast(device_type='cuda', dtype=torch.float16):
@@ -183,35 +173,36 @@ def get_val_losses(model, val_dl, log_file, epoch):
             except RuntimeError as e:  # out of memory error
                 if "out of memory" in str(e):
                     oom = True
-
+                    
                     with open(log_file, "a") as f:
                         f.write("Evaluation:\n")
                         f.write(f"OOM at epoch {epoch}, batch number {num_batch}.\n")
                         f.write(f"Error message: {str(e)}\n\n")
+                    
                 else:
                     raise e
-
+            
             if oom:
                 # free up memory
                 torch.cuda.empty_cache()
                 oom = False
                 num_images -= batch_size
                 continue
-
+            
             # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
             if output == -1:
+
                 with open(log_file, "a") as f:
                     f.write("Evaluation:\n")
                     f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
-
+                
                 num_images -= batch_size
 
                 continue
 
-            total_loss =  output
-            val_losses_dict["total_loss"] += total_loss
+            val_losses_dict["total_loss"] += output
             steps_taken += 1
-
+            
     # normalize the val losses by steps_taken
     val_losses_dict["total_loss"] /= steps_taken
 
@@ -219,7 +210,7 @@ def get_val_losses(model, val_dl, log_file, epoch):
 
 
 def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path):
-    model.eval()
+
 
     epoch = run_params["epoch"]
     steps_taken = run_params["steps_taken"]
@@ -227,11 +218,10 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
     log_file = run_params["log_file"]
 
     # normalize all train losses by steps_taken
-    for loss_type in train_losses_dict:
-        train_losses_dict[loss_type] /= steps_taken
+    train_losses_dict["total_loss"] /= steps_taken
 
     val_losses_dict = get_val_losses(model, val_dl, log_file, epoch)
- 
+    
     # the language model will generate gibberish in the beginning, so no need to evaluate it for first 100000 steps
     # (you may need to change this number based on the batch size you use, we used a small batch size of 2 for resource constraints)
     if epoch > 3: #100000
@@ -250,7 +240,6 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         language_model_scores,
         current_lr
     )
-
     total_val_loss = val_losses_dict["total_loss"]
 
     # decrease lr if total_val_loss has not decreased after certain number of evaluations
@@ -260,9 +249,9 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
     if total_val_loss < run_params["lowest_val_loss"]:
         run_params["lowest_val_loss"] = total_val_loss
         run_params["best_epoch"] = epoch
-
+        
         save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
-
+        
         checkpoint = {
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
@@ -273,3 +262,4 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         }
 
         torch.save(checkpoint, save_path)
+    

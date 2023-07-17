@@ -27,21 +27,21 @@ Ideally, the training should go like this:
     by specifying them in checkpoint = torch.load(...) in line 567
     - train full model with src/full_model/train_full_model.py
 """
-RUN = 4
-RUN_COMMENT = """Enter a comment here."""
+RUN = 6
+RUN_COMMENT = """Subset of Plueral effusion and no findings."""
 SEED = 42
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.01 #1 #1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.05 
-BATCH_SIZE = 8 #16
-EFFECTIVE_BATCH_SIZE = 64 #64  # batch size after gradient accumulation
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.1 #1.0
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.1 #0.05 
+BATCH_SIZE = 2 #16
+EFFECTIVE_BATCH_SIZE = 16 #64 #64  # batch size after gradient accumulation
 NUM_WORKERS = 8 #10
-EPOCHS = 5
+EPOCHS = 50
 LR = 5e-5
 # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 # EVALUATE_EVERY_K_BATCHES should be divisible by ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
-EVALUATE_EVERY_K_BATCHES = 2400 #24 #2400
+EVALUATE_EVERY_K_BATCHES = 240 #24 #2400 #for 0.1 of training subset (1303 im evl at 326)
 PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 THRESHOLD_LR_SCHEDULER = 1e-3  # threshold for measuring the new optimum, to only focus on significant changes
 FACTOR_LR_SCHEDULER = 0.5
