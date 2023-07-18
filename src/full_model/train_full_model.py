@@ -55,9 +55,12 @@ from src.full_model.run_configurations import (
     WEIGHT_LANGUAGE_MODEL_LOSS,
 )
 from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+cuda_device_to_see = 1
+os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
+device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
+torch.cuda.set_device(cuda_device_to_see)
 print("device: ", device)
+
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
@@ -163,6 +166,7 @@ def train_model(
 
             try:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    #print(images.device, input_ids.device, attention_mask.device)
                     output = model(images, input_ids, attention_mask)
                     #print(torch.cuda.memory_summary())
                     # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
@@ -362,7 +366,7 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
         phrases_with_special_tokens = [bos_token + phrases + eos_token]
 
         # the tokenizer will return input_ids of type List[List[int]] and attention_mask of type List[List[int]]
-        return tokenizer(phrases_with_special_tokens, truncation=True, max_length=512)#1024
+        return tokenizer(phrases_with_special_tokens, truncation=True, max_length=1024)#1024
 
     tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
@@ -400,9 +404,9 @@ def get_datasets(config_file_path):
     ]
 
     datasets_as_dfs = {}
-    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train_nf_eq.csv"), usecols=usecols)
+    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train.csv"), usecols=usecols)
 
-    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid_nf_eq.csv"), usecols=usecols)
+    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols)
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -457,7 +461,8 @@ def create_run_folder():
     os.mkdir(generated_sentences_and_reports_folder_path)
     os.mkdir(generated_sentences_folder_path)
     os.mkdir(generated_reports_folder_path)
-
+    os.mkdir(log_file)
+    
     log.info(f"Run {RUN} folder created at {run_folder_path}.")
 
     config_file_path = os.path.join(run_folder_path, "run_config.txt")

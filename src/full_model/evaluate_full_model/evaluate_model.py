@@ -32,8 +32,11 @@ from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.evaluate_full_model.evaluate_language_model import evaluate_language_model
 from src.full_model.run_configurations import EPOCH_TO_EVAL_LANG_ON, PRETRAIN_WITHOUT_LM_MODEL
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+cuda_device_to_see = 1
+os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
+device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
+torch.cuda.set_device(cuda_device_to_see)
+print("device: ", device)
 
 def write_all_losses_and_scores_to_tensorboard(
     writer,
@@ -213,7 +216,11 @@ def get_val_losses(model, val_dl,
 
 def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path):
 
-
+    os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
+    device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
+    torch.cuda.set_device(cuda_device_to_see)
+    print("device: ", device)
+    
     epoch = run_params["epoch"]
     steps_taken = run_params["steps_taken"]
     overall_steps_taken = run_params["overall_steps_taken"]

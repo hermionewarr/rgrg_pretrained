@@ -60,7 +60,11 @@ from src.full_model.run_configurations import (
 )
 from src.path_datasets_and_weights import path_chexbert_weights
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+cuda_device_to_see = 1
+os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
+device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
+torch.cuda.set_device(cuda_device_to_see)
+print("device: ", device)
 
 
 def compute_NLG_scores(nlg_metrics: list[str], gen_sents_or_reports: list[str], ref_sents_or_reports: list[str]) -> dict[str, float]:
@@ -165,7 +169,7 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
     def get_chexbert():
         model = bert_labeler()
         model = nn.DataParallel(model)  # needed since weights were saved with nn.DataParallel
-        checkpoint = torch.load(path_chexbert_weights, map_location=torch.device("cpu"))
+        checkpoint = torch.load(path_chexbert_weights, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         model = model.to(device)
         model.eval()
@@ -190,8 +194,8 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
                 csv_writer.writerows([[ref_report] for ref_report in ref_reports])
 
             # preds_*_reports are List[List[int]] with the labels extracted by CheXbert (see doc string for details)
-            preds_gen_reports = label(chexbert, csv_gen_reports_file_path)
-            preds_ref_reports = label(chexbert, csv_ref_reports_file_path)
+            preds_gen_reports = label(chexbert, csv_gen_reports_file_path, device)
+            preds_ref_reports = label(chexbert, csv_ref_reports_file_path, device)
 
         return preds_gen_reports, preds_ref_reports
 
@@ -224,10 +228,10 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
 
         total_preds_gen_reports_5_conditions = []
         total_preds_ref_reports_5_conditions = [] """
-        two_conditions_to_evaluate = {"No Findings", "Pleural Effusion"}
+        """ two_conditions_to_evaluate = {"No Findings", "Pleural Effusion"}
 
         total_preds_gen_reports_2_conditions = []
-        total_preds_ref_reports_2_conditions = []
+        total_preds_ref_reports_2_conditions = [] """
 
         # we also compute the micro average over all 14 conditions:
         total_preds_gen_reports_14_conditions = []
@@ -235,9 +239,9 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
 
         # iterate over the 14 conditions
         for preds_gen_reports_condition, preds_ref_reports_condition, condition in zip(preds_gen_reports_converted, preds_ref_reports_converted, CONDITIONS):
-            if condition in two_conditions_to_evaluate:
+            """ if condition in two_conditions_to_evaluate:
                 total_preds_gen_reports_2_conditions.extend(preds_gen_reports_condition)
-                total_preds_ref_reports_2_conditions.extend(preds_ref_reports_condition)
+                total_preds_ref_reports_2_conditions.extend(preds_ref_reports_condition) """
 
             total_preds_gen_reports_14_conditions.extend(preds_gen_reports_condition)
             total_preds_ref_reports_14_conditions.extend(preds_ref_reports_condition)
@@ -261,13 +265,13 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         language_model_scores["report"]["CE"]["acc_all"] = acc
 
         # compute and save scores for the 5 conditions # 2 pleural effusion or none
-        precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_2_conditions, total_preds_gen_reports_2_conditions, average="binary")
+        """ precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_2_conditions, total_preds_gen_reports_2_conditions, average="binary")
         acc = accuracy_score(total_preds_ref_reports_2_conditions, total_preds_gen_reports_2_conditions)
 
         language_model_scores["report"]["CE"]["precision_micro_2"] = precision
         language_model_scores["report"]["CE"]["recall_micro_2"] = recall
         language_model_scores["report"]["CE"]["f1_micro_2"] = f1
-        language_model_scores["report"]["CE"]["acc_2"] = acc
+        language_model_scores["report"]["CE"]["acc_2"] = acc """
 
     def compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports):
         """
@@ -566,6 +570,12 @@ def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions
     return ref_sentences_for_selected_regions.tolist()
 
 def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path):
+    
+    os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
+    device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
+    torch.cuda.set_device(cuda_device_to_see)
+    print("device: ", device)
+
     epoch = run_params["epoch"]
     overall_steps_taken = run_params["overall_steps_taken"]
     log_file = run_params["log_file"]
@@ -583,7 +593,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     # and of course the generated and reference reports, and additionally keep track of the generated sentences
     # that were removed because they were too similar to other generated sentences (only as a sanity-check/for writing to file)
     gen_and_ref_reports = {
-        "scan_ids" : [],
+        #"scan_ids" : [],
         "generated_reports": [],
         #"removed_similar_generated_sentences": [],
         "reference_reports": [],

@@ -49,7 +49,7 @@ def load_unlabeled_data(csv_path, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS
                                          num_workers=num_workers, collate_fn=collate_fn)
     return loader
     
-def label(model, csv_path):
+def label(model, csv_path, device):
     """Labels a dataset of reports
     @param model (nn.Module): instantiated CheXbert model
     @param csv_path (string): location of csv with reports
@@ -58,7 +58,7 @@ def label(model, csv_path):
     """
     ld = load_unlabeled_data(csv_path)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model.eval()
     y_pred = [[] for _ in range(len(CONDITIONS))]
