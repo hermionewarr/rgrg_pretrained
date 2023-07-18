@@ -16,6 +16,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
+import time
 
 import sys
 sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
@@ -54,9 +55,9 @@ from src.full_model.run_configurations import (
     WEIGHT_LANGUAGE_MODEL_LOSS,
 )
 from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
-#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print("device: ", device)
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
@@ -175,9 +176,9 @@ def train_model(
                         optimizer.zero_grad()
                         continue
 
-                    total_loss = output
+                    #total_loss = output
 
-                scaler.scale(total_loss).backward()
+                scaler.scale(output).backward()
 
             except RuntimeError as e:  # out of memory error
                 log.info(f"Error: {e}")
@@ -201,14 +202,19 @@ def train_model(
                 optimizer.zero_grad()
                 oom = False
                 continue
-            
+
             if (num_batch + 1) % ACCUMULATION_STEPS == 0:
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-
+                for p in model.parameters():
+                    if p.grad is not None:
+                        del p.grad
+                #torch.cuda.empty_cache()
+                
+            torch.cuda.empty_cache()
             # dicts are insertion ordered since Python 3.7
-            train_losses_dict["total_loss"] += total_loss
+            train_losses_dict["total_loss"] += output.item()
             run_params["steps_taken"] += 1
             run_params["overall_steps_taken"] += 1
             
@@ -284,16 +290,18 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         #worker_init_fn=seed_worker, #fixes the num workers error. no
         #generator=g,
         pin_memory=False,
-        persistent_workers=True
+        persistent_workers=True,
+        #prefetch_factor = None #default 2 if num_workers>0, otherwise None
     )
     val_loader = DataLoader(
         val_dataset,
         collate_fn=custom_collate_val,
         batch_size= BATCH_SIZE,
-        shuffle=False,
+        shuffle=True,
         num_workers=0,  # could also be set to NUM_WORKERS, but I had some problems with the val loader stopping sometimes when num_workers != 0
         pin_memory=False,
-        persistent_workers=False
+        persistent_workers=False,
+        #prefetch_factor = None
     )
 
     return train_loader, val_loader
@@ -392,9 +400,9 @@ def get_datasets(config_file_path):
     ]
 
     datasets_as_dfs = {}
-    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train_subset.csv"), usecols=usecols)
+    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train_nf_eq.csv"), usecols=usecols)
 
-    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid_subset.csv"), usecols=usecols)
+    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid_nf_eq.csv"), usecols=usecols)
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])

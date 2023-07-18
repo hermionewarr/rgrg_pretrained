@@ -12,5 +12,5 @@ CONDITIONS = ['Enlarged Cardiomediastinum', 'Cardiomegaly', 'Lung Opacity',
               'Lung Lesion', 'Edema', 'Consolidation', 'Pneumonia', 'Atelectasis',
               'Pneumothorax', 'Pleural Effusion', 'Pleural Other', 'Fracture',
               'Support Devices', 'No Finding']
-CONDITIONS = ['Pleural Effusion', 'No Finding'] #for subset
+
 CLASS_MAPPING = {0: "Blank", 1: "Positive", 2: "Negative", 3: "Uncertain"}

@@ -73,7 +73,7 @@ def label(model, csv_path):
             attn_mask = utils.generate_attention_masks(batch, src_len, device)
 
             out = model(batch, attn_mask)
-
+            #print(out.size())
             for j in range(len(out)):
                 curr_y_pred = out[j].argmax(dim=1)  # shape is (batch_size)
                 y_pred[j].append(curr_y_pred)

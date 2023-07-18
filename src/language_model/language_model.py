@@ -53,8 +53,8 @@ class GPT2PseudoAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         self.split_size = self.embed_dim
 
-        self.attn_dropout = nn.Dropout(p=0.1)
-        self.resid_dropout = nn.Dropout(p=0.1)
+        self.attn_dropout = nn.Dropout(p=0.1)#0.1
+        self.resid_dropout = nn.Dropout(p=0.1)#0.1
 
         # seq_len can maximally be 1024 tokens
         max_positions = 1024

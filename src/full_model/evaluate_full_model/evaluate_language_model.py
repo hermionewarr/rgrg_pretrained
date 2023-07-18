@@ -53,7 +53,6 @@ from src.full_model.run_configurations import (
     BATCH_SIZE,
     NUM_BEAMS,
     MAX_NUM_TOKENS_GENERATE,
-    NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
     NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
     NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION,
     NUM_IMAGES_TO_PLOT,
@@ -225,6 +224,10 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
 
         total_preds_gen_reports_5_conditions = []
         total_preds_ref_reports_5_conditions = [] """
+        two_conditions_to_evaluate = {"No Findings", "Pleural Effusion"}
+
+        total_preds_gen_reports_2_conditions = []
+        total_preds_ref_reports_2_conditions = []
 
         # we also compute the micro average over all 14 conditions:
         total_preds_gen_reports_14_conditions = []
@@ -232,9 +235,9 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
 
         # iterate over the 14 conditions
         for preds_gen_reports_condition, preds_ref_reports_condition, condition in zip(preds_gen_reports_converted, preds_ref_reports_converted, CONDITIONS):
-            """ if condition in five_conditions_to_evaluate:
-                total_preds_gen_reports_5_conditions.extend(preds_gen_reports_condition)
-                total_preds_ref_reports_5_conditions.extend(preds_ref_reports_condition) """
+            if condition in two_conditions_to_evaluate:
+                total_preds_gen_reports_2_conditions.extend(preds_gen_reports_condition)
+                total_preds_ref_reports_2_conditions.extend(preds_ref_reports_condition)
 
             total_preds_gen_reports_14_conditions.extend(preds_gen_reports_condition)
             total_preds_ref_reports_14_conditions.extend(preds_ref_reports_condition)
@@ -257,14 +260,14 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         language_model_scores["report"]["CE"]["f1_micro_all"] = f1
         language_model_scores["report"]["CE"]["acc_all"] = acc
 
-        # compute and save scores for the 5 conditions
-        """ precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions, average="binary")
-        acc = accuracy_score(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions)
+        # compute and save scores for the 5 conditions # 2 pleural effusion or none
+        precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_2_conditions, total_preds_gen_reports_2_conditions, average="binary")
+        acc = accuracy_score(total_preds_ref_reports_2_conditions, total_preds_gen_reports_2_conditions)
 
-        language_model_scores["report"]["CE"]["precision_micro_5"] = precision
-        language_model_scores["report"]["CE"]["recall_micro_5"] = recall
-        language_model_scores["report"]["CE"]["f1_micro_5"] = f1
-        language_model_scores["report"]["CE"]["acc_5"] = acc """
+        language_model_scores["report"]["CE"]["precision_micro_2"] = precision
+        language_model_scores["report"]["CE"]["recall_micro_2"] = recall
+        language_model_scores["report"]["CE"]["f1_micro_2"] = f1
+        language_model_scores["report"]["CE"]["acc_2"] = acc
 
     def compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports):
         """
@@ -315,10 +318,10 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
     chexbert = get_chexbert()
     print("Get chexpert labels.")
     preds_gen_reports, preds_ref_reports = get_chexbert_labels_for_gen_and_ref_reports()
-
+    
     print("Compute CE scores.")
     compute_micro_average_CE_scores(preds_gen_reports, preds_ref_reports)
-    compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports)
+    compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports) #this would be something we could include in the loss
 
 
 def compute_language_model_scores(gen_and_ref_reports):
@@ -351,10 +354,10 @@ def compute_language_model_scores(gen_and_ref_reports):
         language_model_scores["report"]["CE"] = {
             # following Miura (https://arxiv.org/pdf/2010.10042.pdf), we evaluate the micro average CE scores over these 5 diseases/conditions:
             # "Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"
-            "precision_micro_5": None,
-            "recall_micro_5": None,
-            "f1_micro_5": None,
-            "acc_5": None,
+            "precision_micro_2": None,
+            "recall_micro_2": None,
+            "f1_micro_2": None,
+            "acc_2": None,
 
             # we additionally compute the micro average CE scores over all conditions
             "precision_micro_all": None,
@@ -443,70 +446,6 @@ def get_plot_title(region_set, region_indices, region_colors, class_detected_img
 
     # add a line break to the title, as to not make it too long
     return ", ".join(region_set[:3]) + "\n" + ", ".join(region_set[3:])
-
-
-def get_generated_sentence_for_region(
-    generated_sentences_for_selected_regions, selected_regions, num_img, region_index
-) -> str:
-    """
-    Args:
-        generated_sentences_for_selected_regions (List[str]): holds the generated sentences for all regions that were selected in the batch, i.e. of length "num_regions_selected_in_batch"
-        selected_regions (Tensor[bool]): of shape [batch_size x 29], specifies for each region if it was selected to get a sentences generated (True) or not by the binary classifier for region selection.
-        Ergo has exactly "num_regions_selected_in_batch" True values.
-        num_img (int): specifies the image we are currently processing in the batch, its value is in the range [0, batch_size-1]
-        region_index (int): specifies the region we are currently processing of a single image, its value is in the range [0, 28]
-
-    Returns:
-        str: generated sentence for region specified by num_img and region_index
-
-    Implementation is not too easy to understand, so here is a toy example with some toy values to explain.
-
-    generated_sentences_for_selected_regions = ["Heart is ok.", "Spine is ok."]
-    selected_regions = [
-        [False, False, True],
-        [True, False, False]
-    ]
-    num_img = 0
-    region_index = 2
-
-    In this toy example, the batch_size = 2 and there are only 3 regions in total for simplicity (instead of the 29).
-    The generated_sentences_for_selected_regions is of len 2, meaning num_regions_selected_in_batch = 2.
-    Therefore, the selected_regions boolean tensor also has exactly 2 True values.
-
-    (1) Flatten selected_regions:
-        selected_regions_flat = [False, False, True, True, False, False]
-
-    (2) Compute cumsum (to get an incrementation each time there is a True value):
-        cum_sum_true_values = [0, 0, 1, 2, 2, 2]
-
-    (3) Reshape cum_sum_true_values to shape of selected_regions
-        cum_sum_true_values = [
-            [0, 0, 1],
-            [2, 2, 2]
-        ]
-
-    (4) Subtract 1 from tensor, such that 1st True value in selected_regions has the index value 0 in cum_sum_true_values,
-        the 2nd True value has index value 1 and so on.
-        cum_sum_true_values = [
-            [-1, -1, 0],
-            [1, 1, 1]
-        ]
-
-    (5) Index cum_sum_true_values with num_img and region_index to get the final index for the generated sentence list
-        index = cum_sum_true_values[num_img][region_index] = cum_sum_true_values[0][2] = 0
-
-    (6) Get generated sentence:
-        generated_sentences_for_selected_regions[index] = "Heart is ok."
-    """
-    selected_regions_flat = selected_regions.reshape(-1)
-    cum_sum_true_values = np.cumsum(selected_regions_flat)
-
-    cum_sum_true_values = cum_sum_true_values.reshape(selected_regions.shape)
-    cum_sum_true_values -= 1
-
-    index = cum_sum_true_values[num_img][region_index]
-
-    return generated_sentences_for_selected_regions[index]
 
 
 def get_generated_reports(generated_sentences_for_selected_regions, selected_regions, sentence_tokenizer, bertscore_threshold):

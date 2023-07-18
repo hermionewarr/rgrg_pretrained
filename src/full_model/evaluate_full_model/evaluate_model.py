@@ -30,7 +30,7 @@ from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.evaluate_full_model.evaluate_language_model import evaluate_language_model
-from src.full_model.run_configurations import PRETRAIN_WITHOUT_LM_MODEL, WEIGHT_OBJECT_DETECTOR_LOSS, WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS, WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS, WEIGHT_LANGUAGE_MODEL_LOSS
+from src.full_model.run_configurations import EPOCH_TO_EVAL_LANG_ON, PRETRAIN_WITHOUT_LM_MODEL
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -41,7 +41,8 @@ def write_all_losses_and_scores_to_tensorboard(
     train_losses_dict,
     val_losses_dict,
     language_model_scores,
-    current_lr
+    current_lr,
+    epoch
 ):
     def write_losses():
         for loss_type in train_losses_dict:
@@ -94,12 +95,12 @@ def write_all_losses_and_scores_to_tensorboard(
         """
         for k, v in ce_score_dict.items():
             if k.startswith("precision") or k.startswith("recall") or k.startswith("f1") or k.startswith("acc"):
-                writer.add_scalar(f"language_model/report/CE/{k}", v, overall_steps_taken)
+                writer.add_scalar(f"CE/{k}", v, overall_steps_taken)
             else:
                 # k is a condition
                 condition_name = "_".join(k.lower().split())
                 for metric, score in ce_score_dict[k].items():
-                    writer.add_scalar(f"language_model/report/CE/{condition_name}/{metric}", score, overall_steps_taken)
+                    writer.add_scalar(f"CE/{condition_name}/{metric}", score, overall_steps_taken)
 
     def write_language_model_scores():
         """
@@ -110,19 +111,20 @@ def write_all_losses_and_scores_to_tensorboard(
             - report: for all generated reports
             - region: for generated sentences per region
         """
+        print(language_model_scores)
         print(language_model_scores.keys())
         #for subset in language_model_scores:
-        for metric, score in language_model_scores.items(): #[subset]
+        for metric, score in language_model_scores["report"].items(): #[subset]
                 if metric == "CE":
                     ce_score_dict = language_model_scores["report"]["CE"]
                     write_clinical_efficacy_scores(ce_score_dict)
                 else:
-                    writer.add_scalar(f"language_model/{subset}/{metric}", score, overall_steps_taken)
+                    writer.add_scalar(f"{metric}", score, overall_steps_taken)
 
     write_losses()
 
-    #if overall_steps_taken > 100000:
-    write_language_model_scores()
+    if epoch >= EPOCH_TO_EVAL_LANG_ON:
+        write_language_model_scores()
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
 
@@ -200,7 +202,7 @@ def get_val_losses(model, val_dl,
 
                 continue
 
-            val_losses_dict["total_loss"] += output
+            val_losses_dict["total_loss"] += output.item()
             steps_taken += 1
             
     # normalize the val losses by steps_taken
@@ -224,7 +226,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
     
     # the language model will generate gibberish in the beginning, so no need to evaluate it for first 100000 steps
     # (you may need to change this number based on the batch size you use, we used a small batch size of 2 for resource constraints)
-    if epoch > 3: #100000
+    if epoch >= EPOCH_TO_EVAL_LANG_ON: #100000
         print("steps:", overall_steps_taken)
         language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path)
     else:
@@ -238,7 +240,8 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         train_losses_dict,
         val_losses_dict,
         language_model_scores,
-        current_lr
+        current_lr,
+        epoch
     )
     total_val_loss = val_losses_dict["total_loss"]
 
