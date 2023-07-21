@@ -288,9 +288,9 @@ def test(model, checkpoint_path, test_ld, f1_weights):
     @param f1_weights (dictionary): maps conditions to f1 task weights
     """
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    if torch.cuda.device_count() > 1:
+    """ if torch.cuda.device_count() > 1:
         print("Using", torch.cuda.device_count(), "GPUs!")
-        model = nn.DataParallel(model) #to utilize multiple GPU's
+        model = nn.DataParallel(model) """ #to utilize multiple GPU's
     model = model.to(device)
 
     checkpoint = torch.load(checkpoint_path)
@@ -348,9 +348,9 @@ def label_report_list(checkpoint_path, report_list):
     
     model = bert_labeler()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    if torch.cuda.device_count() > 1:
+    """ if torch.cuda.device_count() > 1:
         print("Using", torch.cuda.device_count(), "GPUs!")
-        model = nn.DataParallel(model) #to utilize multiple GPU's
+        model = nn.DataParallel(model) """ #to utilize multiple GPU's
     model = model.to(device)
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])

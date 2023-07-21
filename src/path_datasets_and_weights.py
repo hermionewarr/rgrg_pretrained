@@ -31,7 +31,7 @@ path_test_set_evaluation_scores_txt_files = "/u/home/tanida/region-guided-chest-
 
 DATA_PATH = "/home/hermione/Documents/data/"
 MODEL_INFO_PATH = "/home/hermione/Documents/VLP/TUM/rgrg_pretrained/" #/home/hermione/Documents/VLP/rgrg/src/runs
-path_chest_imagenome = DATA_PATH+"rgrg/chest-imagenome-dataset-1.0.0" #hmm do we need this?
+path_chest_imagenome = DATA_PATH+"rgrg/chest-imagenome-dataset-1.0.0"
 path_mimic_cxr = DATA_PATH+"physionet.org/files/mimic-cxr/2.0.0/mimic-cxr-reports/"
 path_mimic_cxr_jpg = DATA_PATH+"physionet.org/files/mimic-cxr-jpg/2.0.0/"
 #path_mimic_cxr_report = DATA_PATH+"physionet.org/files/mimic-cxr/2.0.0/mimic-cxr-reports/"

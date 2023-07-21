@@ -55,7 +55,7 @@ from src.full_model.run_configurations import (
     WEIGHT_LANGUAGE_MODEL_LOSS,
 )
 from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
-cuda_device_to_see = 1
+cuda_device_to_see = 0
 os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
 device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
 torch.cuda.set_device(cuda_device_to_see)
@@ -462,7 +462,7 @@ def create_run_folder():
     os.mkdir(generated_sentences_folder_path)
     os.mkdir(generated_reports_folder_path)
     os.mkdir(log_file)
-    
+
     log.info(f"Run {RUN} folder created at {run_folder_path}.")
 
     config_file_path = os.path.join(run_folder_path, "run_config.txt")
@@ -523,10 +523,11 @@ def main():
 
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    # resume_training = False
+    resume_training = True
     #checkpoint = None
     checkpoint = torch.load(
          "/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt", map_location=device
+         #"/home/hermione/Documents/VLP/TUM/rgrg_pretrained/src/runs/full_model/run_14/checkpoints/checkpoint_val_loss_1.946_overall_steps_136794.pt", map_location=device
     )
 
     model = get_model(checkpoint)
@@ -538,13 +539,14 @@ def main():
     overall_steps_taken = 0
     lowest_val_loss = np.inf
 
-    # if resume_training:
-    #     model.load_state_dict(checkpoint["model"])
-    #     opt.load_state_dict(checkpoint["optimizer"])
-    #     scaler.load_state_dict(checkpoint["scaler"])
-    #     current_epoch = checkpoint["current_epoch"]
-    #     overall_steps_taken = checkpoint["overall_steps_taken"]
-    #     lowest_val_loss = checkpoint["lowest_val_loss"]
+    if resume_training:
+         #model.load_state_dict(checkpoint["model"])
+         opt.load_state_dict(checkpoint["optimizer"])
+         scaler.load_state_dict(checkpoint["scaler"])
+         current_epoch = checkpoint["current_epoch"]
+         overall_steps_taken = checkpoint["overall_steps_taken"]
+         lowest_val_loss = checkpoint["lowest_val_loss"]
+         print("Loaded epoch: ", current_epoch)
 
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
@@ -553,7 +555,8 @@ def main():
         del checkpoint
 
     log.info("Starting training!")
-
+    
+    start = time.time()
     train_model(
         model=model,
         train_dl=train_loader,
@@ -571,7 +574,8 @@ def main():
         writer=writer,
         log_file=log_file,
     )
-
+    end = time.time()
+    print("Training time: ", end-start)
 
 if __name__ == "__main__":
     main()

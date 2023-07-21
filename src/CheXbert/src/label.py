@@ -65,13 +65,14 @@ def label(model, csv_path, device):
 
     print("\nBegin report impression labeling. The progress bar counts the # of batches completed:")
     print("The batch size is %d" % BATCH_SIZE)
+    print("Chexpert: ", device)
     with torch.no_grad():
         for i, data in enumerate(tqdm(ld)):
             batch = data['imp']  # (batch_size, max_len)
             batch = batch.to(device)
             src_len = data['len']
             attn_mask = utils.generate_attention_masks(batch, src_len, device)
-
+            
             out = model(batch, attn_mask)
             #print(out.size())
             for j in range(len(out)):

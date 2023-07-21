@@ -32,7 +32,7 @@ from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.evaluate_full_model.evaluate_language_model import evaluate_language_model
 from src.full_model.run_configurations import EPOCH_TO_EVAL_LANG_ON, PRETRAIN_WITHOUT_LM_MODEL
 
-cuda_device_to_see = 1
+cuda_device_to_see = 0
 os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
 device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
 torch.cuda.set_device(cuda_device_to_see)
@@ -50,7 +50,7 @@ def write_all_losses_and_scores_to_tensorboard(
     def write_losses():
         for loss_type in train_losses_dict:
             writer.add_scalars(
-                "_loss",
+                "loss",
                 {f"{loss_type}_train": train_losses_dict[loss_type], f"{loss_type}_val": val_losses_dict[loss_type]},
                 overall_steps_taken,
             )
@@ -115,7 +115,7 @@ def write_all_losses_and_scores_to_tensorboard(
             - region: for generated sentences per region
         """
         print(language_model_scores)
-        print(language_model_scores.keys())
+        #print(language_model_scores.keys())
         #for subset in language_model_scores:
         for metric, score in language_model_scores["report"].items(): #[subset]
                 if metric == "CE":
@@ -220,7 +220,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
     device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
     torch.cuda.set_device(cuda_device_to_see)
     print("device: ", device)
-    
+
     epoch = run_params["epoch"]
     steps_taken = run_params["steps_taken"]
     overall_steps_taken = run_params["overall_steps_taken"]

@@ -60,7 +60,7 @@ from src.full_model.run_configurations import (
 )
 from src.path_datasets_and_weights import path_chexbert_weights
 
-cuda_device_to_see = 1
+cuda_device_to_see = 0
 os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
 device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
 torch.cuda.set_device(cuda_device_to_see)
@@ -168,7 +168,7 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
 
     def get_chexbert():
         model = bert_labeler()
-        model = nn.DataParallel(model)  # needed since weights were saved with nn.DataParallel
+        #model = nn.DataParallel(model)  # needed since weights were saved with nn.DataParallel
         checkpoint = torch.load(path_chexbert_weights, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         model = model.to(device)
@@ -358,10 +358,6 @@ def compute_language_model_scores(gen_and_ref_reports):
         language_model_scores["report"]["CE"] = {
             # following Miura (https://arxiv.org/pdf/2010.10042.pdf), we evaluate the micro average CE scores over these 5 diseases/conditions:
             # "Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"
-            "precision_micro_2": None,
-            "recall_micro_2": None,
-            "f1_micro_2": None,
-            "acc_2": None,
 
             # we additionally compute the micro average CE scores over all conditions
             "precision_micro_all": None,

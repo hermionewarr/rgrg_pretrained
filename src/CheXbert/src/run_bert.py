@@ -121,9 +121,9 @@ def train(save_path, dataloaders, f1_weights, model=None, device=None,
           model = bert_labeler(pretrain_path=PRETRAIN_PATH)
           model.train()   #put the model into train mode
           device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-          if torch.cuda.device_count() > 1:
+          """ if torch.cuda.device_count() > 1:
                print("Using", torch.cuda.device_count(), "GPUs!")
-               model = nn.DataParallel(model) #to utilize multiple GPU's
+               model = nn.DataParallel(model) """ #to utilize multiple GPU's
           model = model.to(device)
      else:
           model.train()
@@ -208,9 +208,9 @@ def model_from_ckpt(model, ckpt_path):
      @return (tuple): tuple containing the model, optimizer and device
      """
      device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-     if torch.cuda.device_count() > 1:
+     """ if torch.cuda.device_count() > 1:
           print("Using", torch.cuda.device_count(), "GPUs!")
-          model = nn.DataParallel(model) #to utilize multiple GPU's
+          model = nn.DataParallel(model)  """#to utilize multiple GPU's
      model = model.to(device)
      optimizer = torch.optim.Adam(model.parameters())
 
