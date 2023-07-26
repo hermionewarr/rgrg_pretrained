@@ -16,11 +16,18 @@ import spacy
 import torch
 from albumentations.pytorch import ToTensorV2
 from tqdm import tqdm
+import os
 
+import sys
+sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.train_full_model import get_tokenizer
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+cuda_device_to_see = 1
+os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
+device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
+torch.cuda.set_device(cuda_device_to_see)
+print("device: ", device)
 
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 IMAGE_INPUT_SIZE = 512
@@ -98,7 +105,7 @@ def remove_duplicate_generated_sentences(generated_report, bert_score, sentence_
 
 
 def convert_generated_sentences_to_report(generated_sents_for_selected_regions, bert_score, sentence_tokenizer):
-    generated_report = " ".join(sent for sent in generated_sents_for_selected_regions)
+    #generated_report = " ".join(sent for sent in generated_sents_for_selected_regions)
 
     generated_report = remove_duplicate_generated_sentences(generated_report, bert_score, sentence_tokenizer)
     return generated_report
@@ -113,16 +120,16 @@ def get_report_for_image(model, image_tensor, tokenizer, bert_score, sentence_to
             early_stopping=True,
         )
 
-    beam_search_output, _, _, _ = output
+    beam_search_output = output
 
     generated_sents_for_selected_regions = tokenizer.batch_decode(
         beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True
     )  # list[str]
 
-    generated_report = convert_generated_sentences_to_report(
+    """ generated_report = convert_generated_sentences_to_report(
         generated_sents_for_selected_regions, bert_score, sentence_tokenizer
-    )  # str
-
+    )   """# str
+    generated_report = generated_sents_for_selected_regions
     return generated_report
 
 
@@ -157,9 +164,9 @@ def get_model(checkpoint_path):
     # since depending on the torch version, the state dicts may be different
     # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
     # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
-    model = ReportGenerationModel(pretrain_without_lm_model=True)
+    model = ReportGenerationModel(pretrain_without_lm_model=False)
     model.load_state_dict(checkpoint["model"])
-    model.to(device, non_blocking=True)
+    model.to(device, non_blocking=False)
     model.eval()
 
     del checkpoint
@@ -168,19 +175,19 @@ def get_model(checkpoint_path):
 
 
 def main():
-    checkpoint_path = ".../___.pt"
+    checkpoint_path = "/home/hermione/Documents/VLP/TUM/rgrg_pretrained/src/runs/full_model/run_20/checkpoints/checkpoint_val_loss_1.943_overall_steps_184575.pt"
     model = get_model(checkpoint_path)
 
     print("Model instantiated.")
 
     # paths to the images that we want to generate reports for
     images_paths = [
-        ".../___.jpg",
-        ".../___.jpg",
-        ".../___.jpg",
+        "/home/hermione/Documents/data/physionet.org/files/mimic-cxr-jpg/2.0.0/files/p10/p10001038/s58224503/28fad2ac-d6001216-b4f72c5b-2d4d452e-17b6c9a5.jpg",
+        "/home/hermione/Documents/data/physionet.org/files/mimic-cxr-jpg/2.0.0/files/p10/p10002013/s55969846/75a4feeb-09da971a-8852f2d6-5eb13992-42d9a50c.jpg",
+        "/home/hermione/Documents/data/physionet.org/files/mimic-cxr-jpg/2.0.0/files/p10/p10002428/s54831516/852306b6-02fc04aa-82d30dbf-0c2dd18d-5c9ef054.jpg",
     ]
 
-    generated_reports_txt_path = ".../___.txt"
+    generated_reports_txt_path = "inference/generated_reports.txt"
     generated_reports = []
 
     bert_score = evaluate.load("bertscore")

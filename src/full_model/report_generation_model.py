@@ -63,7 +63,9 @@ class ReportGenerationModel(nn.Module):
             position_ids,
             use_cache,
         )
-
+        #im_loss = nn.CrossEntropyLoss()
+        #2048 (with feature maps of size 16x16)
+        #feat_loss = im_loss(features, input_ids)
         del input_ids
         del attention_mask
         del features

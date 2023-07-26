@@ -26,6 +26,7 @@ from src.full_model.evaluate_full_model.evaluate_model import evaluate_model
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.run_configurations import (
     RUN,
+    CUDA_DEVICE,
     RUN_COMMENT,
     SEED,
     PRETRAIN_WITHOUT_LM_MODEL,
@@ -55,7 +56,7 @@ from src.full_model.run_configurations import (
     WEIGHT_LANGUAGE_MODEL_LOSS,
 )
 from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
-cuda_device_to_see = 0
+cuda_device_to_see = CUDA_DEVICE
 os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
 device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
 torch.cuda.set_device(cuda_device_to_see)
@@ -180,7 +181,7 @@ def train_model(
                         optimizer.zero_grad()
                         continue
 
-                    #total_loss = output
+                    total_loss = output.item()
 
                 scaler.scale(output).backward()
 
@@ -218,7 +219,7 @@ def train_model(
                 
             torch.cuda.empty_cache()
             # dicts are insertion ordered since Python 3.7
-            train_losses_dict["total_loss"] += output.item()
+            train_losses_dict["total_loss"] += total_loss #taken from before scaler applied
             run_params["steps_taken"] += 1
             run_params["overall_steps_taken"] += 1
             
@@ -301,8 +302,8 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         val_dataset,
         collate_fn=custom_collate_val,
         batch_size= BATCH_SIZE,
-        shuffle=True,
-        num_workers=0,  # could also be set to NUM_WORKERS, but I had some problems with the val loader stopping sometimes when num_workers != 0
+        shuffle=False,
+        num_workers=NUM_WORKERS,  # could also be set to NUM_WORKERS, but I had some problems with the val loader stopping sometimes when num_workers != 0
         pin_memory=False,
         persistent_workers=False,
         #prefetch_factor = None
@@ -404,9 +405,9 @@ def get_datasets(config_file_path):
     ]
 
     datasets_as_dfs = {}
-    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train.csv"), usecols=usecols)
+    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train_PE_card.csv"), usecols=usecols)
 
-    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols)
+    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid_PE_card.csv"), usecols=usecols)
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -461,7 +462,7 @@ def create_run_folder():
     os.mkdir(generated_sentences_and_reports_folder_path)
     os.mkdir(generated_sentences_folder_path)
     os.mkdir(generated_reports_folder_path)
-    os.mkdir(log_file)
+    #os.mkdir(log_file)
 
     log.info(f"Run {RUN} folder created at {run_folder_path}.")
 
@@ -526,8 +527,8 @@ def main():
     resume_training = True
     #checkpoint = None
     checkpoint = torch.load(
-         "/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt", map_location=device
-         #"/home/hermione/Documents/VLP/TUM/rgrg_pretrained/src/runs/full_model/run_14/checkpoints/checkpoint_val_loss_1.946_overall_steps_136794.pt", map_location=device
+         #"/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt", map_location=device
+         "/home/hermione/Documents/VLP/TUM/rgrg_pretrained/src/runs/full_model/run_21/checkpoints/checkpoint_val_loss_2.060_overall_steps_258410.pt", map_location=device
     )
 
     model = get_model(checkpoint)
@@ -565,7 +566,7 @@ def main():
         scaler=scaler,
         lr_scheduler=lr_scheduler,
         current_epoch=current_epoch,
-        epochs=EPOCHS,
+        epochs=EPOCHS+current_epoch,
         overall_steps_taken=overall_steps_taken,
         lowest_val_loss=lowest_val_loss,
         checkpoints_folder_path=checkpoints_folder_path,

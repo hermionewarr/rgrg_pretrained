@@ -50,6 +50,7 @@ from src.CheXbert.src.models.bert_labeler import bert_labeler
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.evaluate_full_model.cider.cider import Cider
 from src.full_model.run_configurations import (
+    CUDA_DEVICE,
     BATCH_SIZE,
     NUM_BEAMS,
     MAX_NUM_TOKENS_GENERATE,
@@ -60,7 +61,7 @@ from src.full_model.run_configurations import (
 )
 from src.path_datasets_and_weights import path_chexbert_weights
 
-cuda_device_to_see = 0
+cuda_device_to_see = CUDA_DEVICE
 os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
 device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
 torch.cuda.set_device(cuda_device_to_see)
@@ -423,147 +424,6 @@ def write_sentences_and_reports_to_file(
     
     write_reports()
 
-
-def get_plot_title(region_set, region_indices, region_colors, class_detected_img) -> str:
-    """
-    Get a plot title like in the below example.
-    1 region_set always contains 6 regions (except for region_set_5, which has 5 regions).
-    The characters in the brackets represent the colors of the corresponding bboxes (e.g. b = blue),
-    "nd" stands for "not detected" in case the region was not detected by the object detector.
-
-    right lung (b), right costophrenic angle (g, nd), left lung (r)
-    left costophrenic angle (c), cardiac silhouette (m), spine (y, nd)
-    """
-    # get a list of 6 boolean values that specify if that region was detected
-    class_detected = [class_detected_img[region_index] for region_index in region_indices]
-
-    # add color_code to region name (e.g. "(r)" for red)
-    # also add nd to the brackets if region was not detected (e.g. "(r, nd)" if red region was not detected)
-    region_set = [
-        region + f" ({color})" if cls_detect else region + f" ({color}, nd)"
-        for region, color, cls_detect in zip(region_set, region_colors, class_detected)
-    ]
-
-    # add a line break to the title, as to not make it too long
-    return ", ".join(region_set[:3]) + "\n" + ", ".join(region_set[3:])
-
-
-def get_generated_reports(generated_sentences_for_selected_regions, selected_regions, sentence_tokenizer, bertscore_threshold):
-    """
-    Args:
-        generated_sentences_for_selected_regions (List[str]): of length "num_regions_selected_in_batch"
-        selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
-        sentence_tokenizer: used in remove_duplicate_generated_sentences to separate the generated sentences
-
-    Return:
-        generated_reports (List[str]): list of length batch_size containing generated reports for every image in batch
-        removed_similar_generated_sentences (List[Dict[str, List]): list of length batch_size containing dicts that map from one generated sentence to a list
-        of other generated sentences that were removed because they were too similar. Useful for manually verifying if removing similar generated sentences was successful
-    """
-    def remove_duplicate_generated_sentences(gen_report_single_image, bert_score):
-        def check_gen_sent_in_sents_to_be_removed(gen_sent, similar_generated_sents_to_be_removed):
-            for lists_of_gen_sents_to_be_removed in similar_generated_sents_to_be_removed.values():
-                if gen_sent in lists_of_gen_sents_to_be_removed:
-                    return True
-
-            return False
-
-        # since different (closely related) regions can have the same generated sentence, we first remove exact duplicates
-
-        # use sentence tokenizer to separate the generated sentences
-        gen_sents_single_image = sentence_tokenizer(gen_report_single_image).sents
-
-        # convert spacy.tokens.span.Span object into str by using .text attribute
-        gen_sents_single_image = [sent.text for sent in gen_sents_single_image]
-
-        # remove exact duplicates using a dict as an ordered set
-        # note that dicts are insertion ordered as of Python 3.7
-        gen_sents_single_image = list(dict.fromkeys(gen_sents_single_image))
-
-        # there can still be generated sentences that are not exact duplicates, but nonetheless very similar
-        # e.g. "The cardiomediastinal silhouette is normal." and "The cardiomediastinal silhouette is unremarkable."
-        # to remove these "soft" duplicates, we use bertscore
-
-        # similar_generated_sents_to_be_removed maps from one sentence to a list of similar sentences that are to be removed
-        similar_generated_sents_to_be_removed = defaultdict(list)
-
-        # TODO:
-        # the nested for loops below check each generated sentence with every other generated sentence
-        # this is not particularly efficient, since e.g. generated sentences for the region "right lung" most likely
-        # will never be similar to generated sentences for the region "abdomen"
-        # thus, one could speed up these checks by only checking anatomical regions that are similar to each other
-
-        for i in range(len(gen_sents_single_image)):
-            gen_sent_1 = gen_sents_single_image[i]
-
-            for j in range(i + 1, len(gen_sents_single_image)):
-                if check_gen_sent_in_sents_to_be_removed(gen_sent_1, similar_generated_sents_to_be_removed):
-                    break
-
-                gen_sent_2 = gen_sents_single_image[j]
-                if check_gen_sent_in_sents_to_be_removed(gen_sent_2, similar_generated_sents_to_be_removed):
-                    continue
-
-                bert_score_result = bert_score.compute(
-                    lang="en", predictions=[gen_sent_1], references=[gen_sent_2], model_type="distilbert-base-uncased"
-                )
-
-                if bert_score_result["f1"][0] > bertscore_threshold:
-                    # remove the generated similar sentence that is shorter
-                    if len(gen_sent_1) > len(gen_sent_2):
-                        similar_generated_sents_to_be_removed[gen_sent_1].append(gen_sent_2)
-                    else:
-                        similar_generated_sents_to_be_removed[gen_sent_2].append(gen_sent_1)
-
-        gen_report_single_image = " ".join(
-            sent for sent in gen_sents_single_image if not check_gen_sent_in_sents_to_be_removed(sent, similar_generated_sents_to_be_removed)
-        )
-
-        return gen_report_single_image, similar_generated_sents_to_be_removed
-
-    bert_score = evaluate.load("bertscore")
-
-    generated_reports = []
-    removed_similar_generated_sentences = []
-    curr_index = 0
-
-    for selected_regions_single_image in selected_regions:
-        # sum up all True values for a single row in the array (corresponing to a single image)
-        num_selected_regions_single_image = np.sum(selected_regions_single_image)
-
-        # use curr_index and num_selected_regions_single_image to index all generated sentences corresponding to a single image
-        gen_sents_single_image = generated_sentences_for_selected_regions[
-            curr_index: curr_index + num_selected_regions_single_image
-        ]
-
-        # update curr_index for next image
-        curr_index += num_selected_regions_single_image
-
-        # concatenate generated sentences of a single image to a continuous string gen_report_single_image
-        gen_report_single_image = " ".join(sent for sent in gen_sents_single_image)
-
-        gen_report_single_image, similar_generated_sents_to_be_removed = remove_duplicate_generated_sentences(
-            gen_report_single_image, bert_score
-        )
-
-        generated_reports.append(gen_report_single_image)
-        removed_similar_generated_sentences.append(similar_generated_sents_to_be_removed)
-
-    return generated_reports, removed_similar_generated_sentences
-
-
-def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions):
-    """
-    Args:
-        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 29 (the inner list holds all reference phrases of a single image)
-        selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
-    """
-    # array of shape [batch_size x 29]
-    reference_sentences = np.asarray(reference_sentences)
-
-    ref_sentences_for_selected_regions = reference_sentences[selected_regions]
-
-    return ref_sentences_for_selected_regions.tolist()
 
 def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path):
     

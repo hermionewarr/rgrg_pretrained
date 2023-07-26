@@ -30,9 +30,9 @@ from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.evaluate_full_model.evaluate_language_model import evaluate_language_model
-from src.full_model.run_configurations import EPOCH_TO_EVAL_LANG_ON, PRETRAIN_WITHOUT_LM_MODEL
+from src.full_model.run_configurations import EPOCH_TO_EVAL_LANG_ON, PRETRAIN_WITHOUT_LM_MODEL, CUDA_DEVICE
 
-cuda_device_to_see = 0
+cuda_device_to_see = CUDA_DEVICE
 os.environ['CUDA_VISIBLE_DEVICES'] = f'{cuda_device_to_see}'
 device = torch.device(f"cuda:{cuda_device_to_see}" if torch.cuda.is_available() else "cpu")
 torch.cuda.set_device(cuda_device_to_see)
@@ -261,6 +261,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         run_params["best_epoch"] = epoch
         
         save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
+        #remove previous files. 
         
         checkpoint = {
             "model": model.state_dict(),
@@ -270,6 +271,8 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
             "overall_steps_taken": overall_steps_taken,
             "lowest_val_loss": total_val_loss,
         }
-
+        #if os.path.exists(os.path.join(run_params["checkpoints_folder_path"],"/*.pt")):
+        for f in os.listdir(run_params["checkpoints_folder_path"]):
+            os.remove(os.path.join(run_params["checkpoints_folder_path"],f))
         torch.save(checkpoint, save_path)
     

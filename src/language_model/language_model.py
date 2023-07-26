@@ -342,7 +342,7 @@ class LanguageModel(nn.Module):
         attention_mask = (1.0 - attention_mask) * -10000.0
 
         presents = () if use_cache else None
-
+        i=0
         for gpt2_block, layer_past in zip(self.gpt2_blocks, past_key_values):
             layer_norm_1 = gpt2_block[0]
             pseudo_self_attention = gpt2_block[1]
@@ -351,7 +351,10 @@ class LanguageModel(nn.Module):
 
             residual = word_hidden_states
             word_hidden_states = layer_norm_1(word_hidden_states)
-
+            #if i ==0:
+                #im_loss = nn.CrossEntropyLoss()
+                #print(image_hidden_states.size(), word_hidden_states.size())
+                #feat_loss = im_loss(image_hidden_states, word_hidden_states)
             word_hidden_states, present = pseudo_self_attention(word_hidden_states, image_hidden_states, attention_mask, layer_past, use_cache)
 
             # residual connection
@@ -363,7 +366,7 @@ class LanguageModel(nn.Module):
 
             # residual connection
             word_hidden_states = word_hidden_states + residual
-
+            i+=1
             if use_cache:
                 presents += (present,)
 
@@ -400,8 +403,9 @@ class LanguageModel(nn.Module):
             # padding tokens are ignored for loss computation, and loss is averaged over non-ignored targets
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits, shift_labels)
-
-            return loss
+            #feat_loss = loss_fct(image_hidden_states.veiw(-1),shift_labels)
+            total_loss = loss #+ feat_loss
+            return total_loss #loss
 
         if use_cache:
             return lm_logits, presents
