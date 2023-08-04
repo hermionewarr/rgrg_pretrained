@@ -164,7 +164,8 @@ def train_model(
 
             input_ids = input_ids.to(device, non_blocking=False)
             attention_mask = attention_mask.to(device, non_blocking=False) #, non_blocking=True
-
+           #for p in model.parameters():
+                #p.requires_grad = True
             try:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     #print(images.device, input_ids.device, attention_mask.device)
@@ -182,8 +183,8 @@ def train_model(
                         continue
 
                     total_loss = output.item()
-
-                scaler.scale(output).backward()
+                with torch.autograd.set_detect_anomaly(True):
+                    scaler.scale(output).backward()#retain_graph=True)
 
             except RuntimeError as e:  # out of memory error
                 log.info(f"Error: {e}")
@@ -197,7 +198,7 @@ def train_model(
                 else:
                     raise e
             
-            if oom:
+            """ if oom:
                 # free up memory
                 #print(torch.cuda.memory_summary())
                 for p in model.parameters():
@@ -207,14 +208,14 @@ def train_model(
                 optimizer.zero_grad()
                 oom = False
                 continue
-
+ """
             if (num_batch + 1) % ACCUMULATION_STEPS == 0:
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-                for p in model.parameters():
+                """ for p in model.parameters():
                     if p.grad is not None:
-                        del p.grad
+                        del p.grad """
                 #torch.cuda.empty_cache()
                 
             torch.cuda.empty_cache()
@@ -405,9 +406,9 @@ def get_datasets(config_file_path):
     ]
 
     datasets_as_dfs = {}
-    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train_PE_card.csv"), usecols=usecols)
+    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train.csv"), usecols=usecols)
 
-    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid_PE_card.csv"), usecols=usecols)
+    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols)
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -527,8 +528,8 @@ def main():
     resume_training = True
     #checkpoint = None
     checkpoint = torch.load(
-         #"/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt", map_location=device
-         "/home/hermione/Documents/VLP/TUM/rgrg_pretrained/src/runs/full_model/run_21/checkpoints/checkpoint_val_loss_2.060_overall_steps_258410.pt", map_location=device
+         "/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt", map_location=device
+         #"/home/hermione/Documents/VLP/TUM/rgrg_pretrained/src/runs/full_model/run_21/checkpoints/checkpoint_val_loss_2.060_overall_steps_258410.pt", map_location=device
     )
 
     model = get_model(checkpoint)

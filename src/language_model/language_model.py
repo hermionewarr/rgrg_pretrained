@@ -206,11 +206,14 @@ class LanguageModel(nn.Module):
 
         # freeze all parameters of the model
         for param in self.gpt_with_lm_head.parameters():
-            param.requires_grad = False
+            param.requires_grad = False #True #False
 
         # replace normal attention layers by pseudo attention layers
         self._replace_attention_by_pseudo_attention()
 
+        # unfreeze all parameters of the model
+        #for param in self.gpt_with_lm_head.parameters():
+         #   param.requires_grad = True
         # divide model into GPT part and language modeling head part
         self.gpt = self.gpt_with_lm_head.transformer
         self.lm_head = self.gpt_with_lm_head.lm_head
@@ -234,6 +237,12 @@ class LanguageModel(nn.Module):
             nn.ReLU(),
             nn.Linear(in_features=1024, out_features=1024)
         )
+
+        # unfreeze all parameters of the model
+        #for param in self.wte.parameters():
+         #   param.requires_grad = True
+        #for param in self.lm_head.parameters():
+          #  param.requires_grad = True
 
     def _replace_attention_by_pseudo_attention(self):
         GPT2PSA_list = []
@@ -261,7 +270,7 @@ class LanguageModel(nn.Module):
                 input_ids: torch.LongTensor,  # shape [batch_size x seq_len]
                 attention_mask: torch.FloatTensor,  # shape [batch_size x seq_len]
                 image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim] (with image_hidden_dim = 1024)
-                return_loss: bool = False,
+                return_loss: bool = True, #False,
                 past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
                 position_ids: Optional[torch.LongTensor] = None,
                 use_cache: Optional[bool] = False
@@ -287,17 +296,18 @@ class LanguageModel(nn.Module):
         #image_hidden_states = self.dim_reduction(torch.squeeze(pooled,(2,3))) #just squeeze the last two dimensions
         pooled = avg_pool(image_hidden_states)
         image_hidden_states = dim_reduction(torch.squeeze(pooled,(2,3))) #just squeeze the last two dimensions
-        
+        #print("1",image_hidden_states.size())
         # transform image_hidden_states from image feature space to text feature space
         image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape [batch_size x word_hidden_dim], with word_hidden_dim = 1024
-
+        #print("1.5",image_hidden_states.size())
         input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_shape[-1])
-        batch_size = input_ids.shape[0]
-
+        #print("2",input_shape)
+        input_ids2 = input_ids.view(-1, input_shape[-1])
+        batch_size = input_ids2.shape[0]
+        #print("2.5",input_ids2.size())
         # pass the token ids through the word embedding layer to get the word embeddings
-        inputs_embeds = self.wte(input_ids)  # shape [batch_size x seq_len x hidden_dim]
-
+        inputs_embeds = self.wte(input_ids2)  # shape [batch_size x seq_len x hidden_dim]
+        #print("3",inputs_embeds.size())
         # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
@@ -312,11 +322,11 @@ class LanguageModel(nn.Module):
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])  # shape [1 x seq_len]
 
         # pass the position ids through the positional embedding layer to get the positional embeddings
-        position_embeds = self.wte(position_ids)  # shape [1 x seq_len x hidden_dim]
+        #position_embeds = self.wte(position_ids)  # shape [1 x seq_len x hidden_dim]
+        position_embeds = self.wpe(position_ids)
 
         # addition is broadcasted around batch_size dimension
         word_hidden_states = inputs_embeds + position_embeds  # shape [batch_size x seq_len x hidden_dim]
-
         word_hidden_states = self.drop(word_hidden_states)
 
         output_shape = input_shape + (word_hidden_states.size(-1),)
@@ -342,7 +352,7 @@ class LanguageModel(nn.Module):
         attention_mask = (1.0 - attention_mask) * -10000.0
 
         presents = () if use_cache else None
-        i=0
+        #i=0
         for gpt2_block, layer_past in zip(self.gpt2_blocks, past_key_values):
             layer_norm_1 = gpt2_block[0]
             pseudo_self_attention = gpt2_block[1]
@@ -366,19 +376,18 @@ class LanguageModel(nn.Module):
 
             # residual connection
             word_hidden_states = word_hidden_states + residual
-            i+=1
+            #i+=1
             if use_cache:
                 presents += (present,)
-
         word_hidden_states = self.final_layernorm(word_hidden_states)
 
         word_hidden_states = word_hidden_states.view(output_shape)
-
+        #print("lm", word_hidden_states.size())
         lm_logits = self.lm_head(word_hidden_states)  # shape [batch_size x seq_len x vocab_size], with vocab_size = 50257
 
         if return_loss:
             # use input_ids as ground_truth labels
-            labels = input_ids
+            labels = input_ids2
 
             # set padding tokens to -100, such that they are ignored and don't count towards the loss
             labels[mask_to_ignore_padding_tokens_for_loss_computation] = -100
@@ -414,7 +423,7 @@ class LanguageModel(nn.Module):
     def generate(self,
                  image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim]
                  max_length: int = None,
-                 num_beams: int = 4,
+                 num_beams: int = 16,
                  num_beam_groups: int = 1,
                  do_sample: bool = False,
                  num_return_sequences: int = 1,
@@ -471,7 +480,7 @@ class LanguageModel(nn.Module):
                 batch_size=batch_size,
                 num_beams=num_beams,
                 device=self.device,
-                length_penalty=1.0,  # length_penalty > 0.0 encourages the model to generate shorter sequences
+                length_penalty=0.5,#1.0,  # length_penalty > 0.0 encourages the model to generate shorter sequences
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
             )

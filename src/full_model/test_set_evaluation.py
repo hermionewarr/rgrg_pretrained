@@ -61,7 +61,7 @@ Folder specified by path_test_set_evaluation_scores_txt_files will have these fi
     - generated_abnormal_sentences.txt
     - generated_reports.txt
 """
-final_scores_txt_file = os.path.join(path_test_set_evaluation_scores_txt_files, "final_scores_subset.txt")
+final_scores_txt_file = os.path.join(path_test_set_evaluation_scores_txt_files, "final_scores.txt")
 
 
 def write_all_scores_to_file(
@@ -151,7 +151,7 @@ def write_sentences_and_reports_to_file_for_test_set(
     gen_and_ref_reports,
 ):
     def write_reports():
-        txt_file_name = os.path.join(path_test_set_evaluation_scores_txt_files, "generated_reports_subset.txt")
+        txt_file_name = os.path.join(path_test_set_evaluation_scores_txt_files, "generated_reports.txt")
 
         with open(txt_file_name, "a") as f:
             for gen_report, ref_report in zip(
@@ -364,18 +364,17 @@ def get_dataset():
     ]
 
     datasets_as_dfs = {}
-    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test_card_vs_PE.csv"), usecols=usecols)
+    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test.csv"), usecols=usecols)
     #datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-2.csv"), usecols=usecols, converters=converters)
     total_num_samples_test = len(datasets_as_dfs["test"])
     
     #raw_test_2_dataset = Dataset.from_pandas(datasets_as_dfs["test-2"])
-    new_num_samples_test = int(1* total_num_samples_test)
+    new_num_samples_test = int(0.01* total_num_samples_test)
 
     log.info(f"Test: {new_num_samples_test} images")
 
     datasets_as_dfs["test"] = datasets_as_dfs["test"].sample(n=new_num_samples_test, random_state=SEED) #[:new_num_samples_train]
  
-
     raw_test_dataset = Dataset.from_pandas(datasets_as_dfs["test"])
     return raw_test_dataset  #, raw_test_2_dataset
 

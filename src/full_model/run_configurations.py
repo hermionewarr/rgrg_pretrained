@@ -27,14 +27,14 @@ Ideally, the training should go like this:
     by specifying them in checkpoint = torch.load(...) in line 567
     - train full model with src/full_model/train_full_model.py
 """
-RUN = 22
+RUN = 24
 CUDA_DEVICE = 1
-RUN_COMMENT = """training on just pleural effusion vs cardiomegaly. run 21 cont"""
+RUN_COMMENT = """unfreeze exp"""
 SEED = 42
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 1 #1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 1 #0.05 
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.01 #1 #1.0
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.1 #1 #0.05 
 BATCH_SIZE = 8 #16
 EFFECTIVE_BATCH_SIZE = 64 #64 #64  # batch size after gradient accumulation
 NUM_WORKERS = 8 #10

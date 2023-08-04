@@ -30,7 +30,7 @@ import io
 import os
 import re
 import tempfile
-
+import pandas as pd
 import evaluate
 import matplotlib.pyplot as plt
 import numpy as np
@@ -273,6 +273,7 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         language_model_scores["report"]["CE"]["recall_micro_2"] = recall
         language_model_scores["report"]["CE"]["f1_micro_2"] = f1
         language_model_scores["report"]["CE"]["acc_2"] = acc """
+        
 
     def compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports):
         """
@@ -319,6 +320,11 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         language_model_scores["report"]["CE"]["recall_example_all"] = recall_example
         language_model_scores["report"]["CE"]["f1_example_all"] = f1_example
         language_model_scores["report"]["CE"]["acc_example_all"] = acc_example
+
+        df_gen = pd.DataFrame(preds_gen_reports_np)
+        df_gen.to_csv("src/chest-x-ray-report-generation/chexpert_labels_gen.csv", index=False, header=False)
+        df_ref = pd.DataFrame(preds_ref_reports_np)
+        df_ref.to_csv("src/chest-x-ray-report-generation/chexpert_labels_ref.csv", index=False, header=False)
 
     chexbert = get_chexbert()
     print("Get chexpert labels.")
