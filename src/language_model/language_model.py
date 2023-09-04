@@ -239,10 +239,18 @@ class LanguageModel(nn.Module):
         )
 
         # unfreeze all parameters of the model
-        #for param in self.wte.parameters():
-         #   param.requires_grad = True
-        #for param in self.lm_head.parameters():
-          #  param.requires_grad = True
+        #for param in self.wte.parameters(): #doesnt like this one
+            #param.requires_grad = True
+        """ for param in self.wpe.parameters():
+            param.requires_grad = True
+        for param in self.drop.parameters():
+            param.requires_grad = True
+        for param in self.gpt2_blocks.parameters():
+            param.requires_grad = True
+        for param in self.final_layernorm.parameters():
+            param.requires_grad = True """
+        #for param in self.lm_head.parameters(): #or this one
+            #param.requires_grad = True
 
     def _replace_attention_by_pseudo_attention(self):
         GPT2PSA_list = []
@@ -294,19 +302,23 @@ class LanguageModel(nn.Module):
         dim_reduction = nn.Linear(2048, 1024, device=self.device)
         #pooled = self.avg_pool(image_hidden_states)
         #image_hidden_states = self.dim_reduction(torch.squeeze(pooled,(2,3))) #just squeeze the last two dimensions
+        #print(image_hidden_states.size()) #[8, 2048, 16, 16])
         pooled = avg_pool(image_hidden_states)
+        #print(pooled.size()) #[8, 2048, 1, 1]
         image_hidden_states = dim_reduction(torch.squeeze(pooled,(2,3))) #just squeeze the last two dimensions
+        #print(image_hidden_states.size()) #[8, 1024]
         #print("1",image_hidden_states.size())
         # transform image_hidden_states from image feature space to text feature space
         image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape [batch_size x word_hidden_dim], with word_hidden_dim = 1024
         #print("1.5",image_hidden_states.size())
         input_shape = input_ids.size()
         #print("2",input_shape)
-        input_ids2 = input_ids.view(-1, input_shape[-1])
-        batch_size = input_ids2.shape[0]
+        input_ids = input_ids.view(-1, input_shape[-1])
+        batch_size = input_ids.shape[0]
         #print("2.5",input_ids2.size())
         # pass the token ids through the word embedding layer to get the word embeddings
-        inputs_embeds = self.wte(input_ids2)  # shape [batch_size x seq_len x hidden_dim]
+        inputs_embeds = self.wte(input_ids)  # shape [batch_size x seq_len x hidden_dim]
+        
         #print("3",inputs_embeds.size())
         # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
         if position_ids is not None:
@@ -387,7 +399,7 @@ class LanguageModel(nn.Module):
 
         if return_loss:
             # use input_ids as ground_truth labels
-            labels = input_ids2
+            labels = input_ids
 
             # set padding tokens to -100, such that they are ignored and don't count towards the loss
             labels[mask_to_ignore_padding_tokens_for_loss_computation] = -100
@@ -413,8 +425,8 @@ class LanguageModel(nn.Module):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits, shift_labels)
             #feat_loss = loss_fct(image_hidden_states.veiw(-1),shift_labels)
-            total_loss = loss #+ feat_loss
-            return total_loss #loss
+            #total_loss = loss #+ feat_loss
+            return loss
 
         if use_cache:
             return lm_logits, presents

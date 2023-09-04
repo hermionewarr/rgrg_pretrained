@@ -58,7 +58,7 @@ class ObjectDetector(nn.Module):
         # use only the feature extractor of the pre-trained classification model
         # (i.e. use all children but the last 2, which are AdaptiveAvgPool2d and Linear)
         self.backbone = nn.Sequential(*list(resnet.children())[:-2])
-
+        #self.backbone_end = nn.Sequential(*list(resnet.children())[-2:])
         # FasterRCNN needs to know the number of output channels of the backbone
         # for ResNet-50, it's 2048 (with feature maps of size 16x16)
         self.backbone.out_channels = 2048

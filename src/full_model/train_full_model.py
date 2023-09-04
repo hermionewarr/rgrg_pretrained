@@ -170,21 +170,11 @@ def train_model(
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     #print(images.device, input_ids.device, attention_mask.device)
                     output = model(images, input_ids, attention_mask)
-                    #print(torch.cuda.memory_summary())
-                    # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
-                    # this can happen if e.g. the object detector did not detect any regions in an image (e.g. there are a couple of lateral chest x-rays in ChestImaGenome,
-                    # even though the dataset should only include frontal chest x-rays. These bad input images can trigger output == -1)
-                    if output == -1:
-                        with open(run_params["log_file"], "a") as f:
-                            f.write("Training:\n")
-                            f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
-
-                        optimizer.zero_grad()
-                        continue
-
                     total_loss = output.item()
+
                 with torch.autograd.set_detect_anomaly(True):
-                    scaler.scale(output).backward()#retain_graph=True)
+                    scaler.scale(output).backward()#retain_graph=True
+                    #print("we prob not here")
 
             except RuntimeError as e:  # out of memory error
                 log.info(f"Error: {e}")
@@ -198,7 +188,7 @@ def train_model(
                 else:
                     raise e
             
-            """ if oom:
+            if oom:
                 # free up memory
                 #print(torch.cuda.memory_summary())
                 for p in model.parameters():
@@ -208,14 +198,14 @@ def train_model(
                 optimizer.zero_grad()
                 oom = False
                 continue
- """
+
             if (num_batch + 1) % ACCUMULATION_STEPS == 0:
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-                """ for p in model.parameters():
+                for p in model.parameters():
                     if p.grad is not None:
-                        del p.grad """
+                        del p.grad
                 #torch.cuda.empty_cache()
                 
             torch.cuda.empty_cache()
@@ -406,9 +396,9 @@ def get_datasets(config_file_path):
     ]
 
     datasets_as_dfs = {}
-    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train.csv"), usecols=usecols)
+    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train_white_square_classify.csv"), usecols=usecols) #
 
-    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols)
+    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "val_white_square_classify.csv"), usecols=usecols) #val_white_square_classify.csv
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -526,11 +516,12 @@ def main():
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     resume_training = True
-    #checkpoint = None
+    
     checkpoint = torch.load(
          "/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt", map_location=device
          #"/home/hermione/Documents/VLP/TUM/rgrg_pretrained/src/runs/full_model/run_21/checkpoints/checkpoint_val_loss_2.060_overall_steps_258410.pt", map_location=device
     )
+    #checkpoint = None
 
     model = get_model(checkpoint)
 

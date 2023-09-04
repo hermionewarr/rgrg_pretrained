@@ -29,8 +29,8 @@ from src.full_model.train_full_model import get_tokenizer
 from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model, path_test_set_evaluation_scores_txt_files
 
 # specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
-RUN = 21
-CHECKPOINT = "checkpoint_val_loss_2.060_overall_steps_258410.pt"#"checkpoint_val_loss_1.778_overall_steps_501150.pt"
+RUN = 24
+CHECKPOINT = "checkpoint_val_loss_1.197_overall_steps_180386.pt"#"checkpoint_val_loss_1.778_overall_steps_501150.pt"
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 8

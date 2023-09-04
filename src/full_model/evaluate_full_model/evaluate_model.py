@@ -188,7 +188,7 @@ def get_val_losses(model, val_dl,
                     raise e
             
             if oom:
-                # free up memory
+                # free up memorypath_
                 torch.cuda.empty_cache()
                 oom = False
                 num_images -= batch_size

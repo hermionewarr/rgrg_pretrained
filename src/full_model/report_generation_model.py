@@ -2,7 +2,7 @@ from typing import List, Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
-
+from torchvision.models import resnet50, ResNet50_Weights
 import sys
 sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
 from src.binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
@@ -53,7 +53,7 @@ class ReportGenerationModel(nn.Module):
         """
         features = self.object_detector(images)
         del images
-
+    
         language_model_loss = self.language_model(
             input_ids,
             attention_mask,

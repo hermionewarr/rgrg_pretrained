@@ -44,6 +44,8 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
+import sys
+sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
 from src.CheXbert.src.constants import CONDITIONS
 from src.CheXbert.src.label import label
 from src.CheXbert.src.models.bert_labeler import bert_labeler
@@ -322,9 +324,9 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         language_model_scores["report"]["CE"]["acc_example_all"] = acc_example
 
         df_gen = pd.DataFrame(preds_gen_reports_np)
-        df_gen.to_csv("src/chest-x-ray-report-generation/chexpert_labels_gen.csv", index=False, header=False)
+        df_gen.to_csv("chexpert_labels_gen.csv", index=False, header=False) 
         df_ref = pd.DataFrame(preds_ref_reports_np)
-        df_ref.to_csv("src/chest-x-ray-report-generation/chexpert_labels_ref.csv", index=False, header=False)
+        df_ref.to_csv("chexpert_labels_ref.csv", index=False, header=False)
 
     chexbert = get_chexbert()
     print("Get chexpert labels.")
