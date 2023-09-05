@@ -11,6 +11,7 @@ from src.object_detector.object_detector import ObjectDetector
 from src.language_model.language_model import LanguageModel
 from src.full_model.run_configurations import NUM_BEAMS
 
+
 class ReportGenerationModel(nn.Module):
     """
     Full model consisting of:
@@ -24,7 +25,7 @@ class ReportGenerationModel(nn.Module):
         super().__init__()
         self.pretrain_without_lm_model = pretrain_without_lm_model
 
-        self.object_detector = ObjectDetector()
+        self.object_detector = ObjectDetector() #gives us the resent image features
         # Load the best object detector from the 1st training stage here when starting the 2nd training stage
         # path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_10/weights/val_loss_13.482_epoch_6.pth"
         # self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
@@ -53,7 +54,9 @@ class ReportGenerationModel(nn.Module):
         """
         features = self.object_detector(images)
         del images
-    
+
+        #print(features.size())
+        
         language_model_loss = self.language_model(
             input_ids,
             attention_mask,

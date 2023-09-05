@@ -6,7 +6,8 @@ from torch.nn import CrossEntropyLoss
 from torchinfo import summary
 from transformers import GPT2LMHeadModel
 from transformers.generation.beam_search import BeamSearchScorer
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 class Conv1DWithTrainedWeights(nn.Module):
     """
@@ -214,7 +215,7 @@ class LanguageModel(nn.Module):
         # unfreeze all parameters of the model
         #for param in self.gpt_with_lm_head.parameters():
          #   param.requires_grad = True
-        # divide model into GPT part and language modeling head part
+        # divide model into GPT part and language modeling head parthttps://arxiv.org/pdf/2305.17100.pdf
         self.gpt = self.gpt_with_lm_head.transformer
         self.lm_head = self.gpt_with_lm_head.lm_head
 
@@ -232,10 +233,24 @@ class LanguageModel(nn.Module):
         # small neural network to transform embeddings coming from the image feature space into embeddings in the text feature space
         #self.avg_pool = nn.AvgPool2d(kernel_size=16)
         #self.dim_reduction = nn.Linear(2048, 1024)
-        self.feature_space_transformation_nn = nn.Sequential(
+        """ self.feature_space_transformation_nn = nn.Sequential(
             nn.Linear(in_features=1024, out_features=1024),
             nn.ReLU(),
             nn.Linear(in_features=1024, out_features=1024)
+        ) """
+
+        self.dense_layer = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),  # Global average pooling to reduce spatial dimensions to 1x1
+            nn.Flatten(),  # Flatten the tensor
+            nn.Linear(2048, 1024, device=self.device),
+            nn.ReLU(),
+            nn.Linear(in_features=1024, out_features=1024, device=self.device)
+        )
+
+        self.dense_layer2 = nn.Sequential(
+            self.dense_layer,
+            nn.Linear(1048, 1, device=self.device),  # Fully connected layer with 1 output unit for binary classification
+            nn.Sigmoid()  # Sigmoid activation for binary classification
         )
 
         # unfreeze all parameters of the model
@@ -298,28 +313,62 @@ class LanguageModel(nn.Module):
         """
         # get a boolean copy of the attention_mask and invert it
         mask_to_ignore_padding_tokens_for_loss_computation = ~(attention_mask.to(torch.bool))
-        avg_pool = nn.AvgPool2d(kernel_size=16)
-        dim_reduction = nn.Linear(2048, 1024, device=self.device)
-        #pooled = self.avg_pool(image_hidden_states)
-        #image_hidden_states = self.dim_reduction(torch.squeeze(pooled,(2,3))) #just squeeze the last two dimensions
-        #print(image_hidden_states.size()) #[8, 2048, 16, 16])
-        pooled = avg_pool(image_hidden_states)
-        #print(pooled.size()) #[8, 2048, 1, 1]
-        image_hidden_states = dim_reduction(torch.squeeze(pooled,(2,3))) #just squeeze the last two dimensions
-        #print(image_hidden_states.size()) #[8, 1024]
-        #print("1",image_hidden_states.size())
-        # transform image_hidden_states from image feature space to text feature space
-        image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape [batch_size x word_hidden_dim], with word_hidden_dim = 1024
-        #print("1.5",image_hidden_states.size())
+        """ avg_pool = nn.AvgPool2d(kernel_size=16)
+        dim_reduction = nn.Linear(2048, 1024, device=self.device)#524288 
+        dense_layer = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),  # Global average pooling to reduce spatial dimensions to 1x1
+            nn.Flatten(),  # Flatten the tensor
+            nn.Linear(2048, 1, device=self.device),  # Fully connected layer with 1 output unit for binary classification
+            nn.Sigmoid()  # Sigmoid activation for binary classification
+        ) """
+        
+        print(input_ids.size())
+        """ dense_layer2 = nn.Sequential(
+            nn.Linear(7, 1, device=self.device),  # Fully connected layer with 1 output unit for binary classification
+            nn.Sigmoid()  # Sigmoid activation for binary classification
+        )
+        
+        print(dense_layer2.Linear.weight.dtype)
+        target = dense_layer2(input_ids.to(self.device)) """
+        
+        loss_fct = CrossEntropyLoss()
+        loss_fct = nn.BCELoss()
+        condition = torch.tensor([50256, 47, 293, 1523, 27848, 4241, 50256], device=self.device)
+        
+        image_hidden_states = self.dense_layer(image_hidden_states)
+        classified = self.dense_layer2(image_hidden_states) 
+        
+        for param in self.dense_layer.parameters():
+            print(param.grad.data.sum())
+
         input_shape = input_ids.size()
-        #print("2",input_shape)
+        print("2",input_shape)
         input_ids = input_ids.view(-1, input_shape[-1])
         batch_size = input_ids.shape[0]
+        target = torch.zeros((batch_size,1), device=self.device)
+        for i in range(batch_size):
+            if (input_ids[i] == condition).all():
+                target[i] = 1.0
+            else: target[i] = 0.0
+
+        #print(target)
+        #print(input_ids)
+        #print(classified)
+        #print(classified.size(), target.size())
+        im_loss = loss_fct(classified, target)
+        print("im loss: ", im_loss)
+
+        #or
+        #image_hidden_states = image_hidden_states.view(batch_size, -1)
+        #image_hidden_states = dim_reduction(image_hidden_states)
+        #print(image_hidden_states.size())
+        #classification = nn.Linear(in_features=1024, out_features=1)
+        
         #print("2.5",input_ids2.size())
         # pass the token ids through the word embedding layer to get the word embeddings
         inputs_embeds = self.wte(input_ids)  # shape [batch_size x seq_len x hidden_dim]
         
-        #print("3",inputs_embeds.size())
+        print("3",inputs_embeds.size())
         # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
@@ -425,8 +474,10 @@ class LanguageModel(nn.Module):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits, shift_labels)
             #feat_loss = loss_fct(image_hidden_states.veiw(-1),shift_labels)
-            #total_loss = loss #+ feat_loss
-            return loss
+            total_loss = loss + im_loss
+            print("loss: ", loss)
+            print("total loss: ", total_loss)
+            return total_loss
 
         if use_cache:
             return lm_logits, presents

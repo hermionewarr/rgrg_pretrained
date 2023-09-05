@@ -515,13 +515,13 @@ def main():
 
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    resume_training = True
+    resume_training = False
     
-    checkpoint = torch.load(
+    """ checkpoint = torch.load(
          "/home/hermione/Documents/VLP/TUM/rgrg/full_model_checkpoint_val_loss_19.793_overall_steps_155252.pt", map_location=device
          #"/home/hermione/Documents/VLP/TUM/rgrg_pretrained/src/runs/full_model/run_21/checkpoints/checkpoint_val_loss_2.060_overall_steps_258410.pt", map_location=device
-    )
-    #checkpoint = None
+    ) """
+    checkpoint = None
 
     model = get_model(checkpoint)
 
