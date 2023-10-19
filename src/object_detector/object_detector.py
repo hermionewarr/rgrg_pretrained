@@ -6,16 +6,16 @@ from torch import Tensor
 import torch.nn as nn
 import torchvision
 from torchvision.models import resnet50, ResNet50_Weights
-from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
-from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
+#from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
+#from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
 # from torchinfo import summary
 
 import sys
-sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
-from src.object_detector.custom_roi_heads import CustomRoIHeads
-from src.object_detector.custom_rpn import CustomRegionProposalNetwork
+sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_edit2/")
+#from src.object_detector.custom_roi_heads import CustomRoIHeads
+#from src.object_detector.custom_rpn import CustomRegionProposalNetwork
 from src.object_detector.image_list import ImageList
-
+from src.full_model.run_configurations import PRETRAIN_WITHOUT_LM_MODEL
 
 class ObjectDetector(nn.Module):
     """
@@ -63,6 +63,15 @@ class ObjectDetector(nn.Module):
         # for ResNet-50, it's 2048 (with feature maps of size 16x16)
         self.backbone.out_channels = 2048
 
+        self.dense_layer = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),  # Global average pooling to reduce spatial dimensions to 1x1
+            nn.Flatten(),  # Flatten the tensor
+            nn.Linear(2048, 1024),
+            nn.ReLU(),
+            nn.Linear(in_features=1024, out_features=1), # Fully connected layer with 1 output unit for binary classification
+            nn.Sigmoid()  # Sigmoid activation for binary classification
+        )
+
         #for name, param in self.backbone.named_parameters(): #check trainable
         #    print(f"Parameter: {name}, Requires grad: {param.requires_grad}") #yep all true
 
@@ -103,6 +112,12 @@ class ObjectDetector(nn.Module):
         """
         features = self.backbone(images)
 
+        
+
         # if we return region features, then we train/evaluate the full model (with object detector as one part of it)
-        return features
+        if PRETRAIN_WITHOUT_LM_MODEL:
+            classified = self.dense_layer(features)
+            return classified
+        else:
+            return features
     

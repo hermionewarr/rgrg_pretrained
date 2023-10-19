@@ -202,6 +202,29 @@ class LanguageModel(nn.Module):
         self.eos_token_id = 50256
         self.pad_token_id = 50256
 
+        # small neural network to transform embeddings coming from the image feature space into embeddings in the text feature space
+        #self.avg_pool = nn.AvgPool2d(kernel_size=16)
+        #self.dim_reduction = nn.Linear(2048, 1024)
+        """ self.feature_space_transformation_nn = nn.Sequential(
+            nn.Linear(in_features=1024, out_features=1024),
+            nn.ReLU(),
+            nn.Linear(in_features=1024, out_features=1024)
+        ) """
+
+        self.dense_layer = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),  # Global average pooling to reduce spatial dimensions to 1x1
+            nn.Flatten(),  # Flatten the tensor
+            nn.Linear(2048, 1024, device=self.device),
+            nn.ReLU(),
+            nn.Linear(in_features=1024, out_features=1024, device=self.device)
+        )
+
+        self.dense_layer2 = nn.Sequential(
+            #self.dense_layer,
+            nn.Linear(1024, 1, device=self.device),  # Fully connected layer with 1 output unit for binary classification
+            nn.Sigmoid()  # Sigmoid activation for binary classification
+        )
+
         # use GPT2 model with language modeling head, since we want to generate phrases
         self.gpt_with_lm_head = GPT2LMHeadModel.from_pretrained(self.checkpoint)
 
@@ -229,29 +252,6 @@ class LanguageModel(nn.Module):
 
         # convert each individual gpt2_block into a nn.ModuleList
         self.gpt2_blocks = nn.ModuleList(nn.ModuleList(gpt2_block.children()) for gpt2_block in self.gpt2_blocks)
-
-        # small neural network to transform embeddings coming from the image feature space into embeddings in the text feature space
-        #self.avg_pool = nn.AvgPool2d(kernel_size=16)
-        #self.dim_reduction = nn.Linear(2048, 1024)
-        """ self.feature_space_transformation_nn = nn.Sequential(
-            nn.Linear(in_features=1024, out_features=1024),
-            nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=1024)
-        ) """
-
-        self.dense_layer = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1, 1)),  # Global average pooling to reduce spatial dimensions to 1x1
-            nn.Flatten(),  # Flatten the tensor
-            nn.Linear(2048, 1024, device=self.device),
-            nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=1024, device=self.device)
-        )
-
-        self.dense_layer2 = nn.Sequential(
-            self.dense_layer,
-            nn.Linear(1048, 1, device=self.device),  # Fully connected layer with 1 output unit for binary classification
-            nn.Sigmoid()  # Sigmoid activation for binary classification
-        )
 
         # unfreeze all parameters of the model
         #for param in self.wte.parameters(): #doesnt like this one
@@ -313,50 +313,40 @@ class LanguageModel(nn.Module):
         """
         # get a boolean copy of the attention_mask and invert it
         mask_to_ignore_padding_tokens_for_loss_computation = ~(attention_mask.to(torch.bool))
-        """ avg_pool = nn.AvgPool2d(kernel_size=16)
-        dim_reduction = nn.Linear(2048, 1024, device=self.device)#524288 
-        dense_layer = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1, 1)),  # Global average pooling to reduce spatial dimensions to 1x1
-            nn.Flatten(),  # Flatten the tensor
-            nn.Linear(2048, 1, device=self.device),  # Fully connected layer with 1 output unit for binary classification
+        #print(input_ids.size())
+        
+        """ dense_layer2 = nn.Sequential(
+            nn.Linear(1028, 1, device=self.device),  # Fully connected layer with 1 output unit for binary classification
             nn.Sigmoid()  # Sigmoid activation for binary classification
         ) """
         
-        print(input_ids.size())
-        """ dense_layer2 = nn.Sequential(
-            nn.Linear(7, 1, device=self.device),  # Fully connected layer with 1 output unit for binary classification
-            nn.Sigmoid()  # Sigmoid activation for binary classification
-        )
-        
-        print(dense_layer2.Linear.weight.dtype)
-        target = dense_layer2(input_ids.to(self.device)) """
-        
-        loss_fct = CrossEntropyLoss()
-        loss_fct = nn.BCELoss()
-        condition = torch.tensor([50256, 47, 293, 1523, 27848, 4241, 50256], device=self.device)
+        #loss_fct = CrossEntropyLoss()
+        #loss_fct = nn.BCELoss()
+        loss_fct = nn.BCEWithLogitsLoss()
+        condition = torch.tensor([50256, 47, 293, 1523, 27848, 4241, 50256], device=self.device) #plueral effusion
         
         image_hidden_states = self.dense_layer(image_hidden_states)
         classified = self.dense_layer2(image_hidden_states) 
         
-        for param in self.dense_layer.parameters():
-            print(param.grad.data.sum())
+        """ for param in self.dense_layer.parameters():
+            print(param.grad.data.sum()) """
 
         input_shape = input_ids.size()
-        print("2",input_shape)
+        #print("2",input_shape)
         input_ids = input_ids.view(-1, input_shape[-1])
         batch_size = input_ids.shape[0]
         target = torch.zeros((batch_size,1), device=self.device)
         for i in range(batch_size):
-            if (input_ids[i] == condition).all():
+            if (input_ids[i] == condition).all(): #if ==plueral effusion else cardiomegaly
                 target[i] = 1.0
             else: target[i] = 0.0
 
-        #print(target)
-        #print(input_ids)
-        #print(classified)
+        print(target)
+        print(input_ids)
+        print(classified)
         #print(classified.size(), target.size())
         im_loss = loss_fct(classified, target)
-        print("im loss: ", im_loss)
+        #print("im loss: ", im_loss)
 
         #or
         #image_hidden_states = image_hidden_states.view(batch_size, -1)
@@ -368,7 +358,7 @@ class LanguageModel(nn.Module):
         # pass the token ids through the word embedding layer to get the word embeddings
         inputs_embeds = self.wte(input_ids)  # shape [batch_size x seq_len x hidden_dim]
         
-        print("3",inputs_embeds.size())
+        #print("3",inputs_embeds.size())
         # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
@@ -474,8 +464,8 @@ class LanguageModel(nn.Module):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits, shift_labels)
             #feat_loss = loss_fct(image_hidden_states.veiw(-1),shift_labels)
-            total_loss = loss + im_loss
-            print("loss: ", loss)
+            total_loss = loss + 10*im_loss
+            print("nlp loss and im loss: ", loss, im_loss)
             print("total loss: ", total_loss)
             return total_loss
 

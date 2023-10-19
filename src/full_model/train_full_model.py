@@ -19,7 +19,7 @@ from tqdm import tqdm
 import time
 
 import sys
-sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_pretrained/")
+sys.path.append("/home/hermione/Documents/VLP/TUM/rgrg_edit2/")
 from src.full_model.custom_collator import CustomCollator
 from src.full_model.custom_dataset import CustomDataset
 from src.full_model.evaluate_full_model.evaluate_model import evaluate_model
@@ -166,15 +166,23 @@ def train_model(
             attention_mask = attention_mask.to(device, non_blocking=False) #, non_blocking=True
            #for p in model.parameters():
                 #p.requires_grad = True
+            
+            
             try:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     #print(images.device, input_ids.device, attention_mask.device)
                     output = model(images, input_ids, attention_mask)
                     total_loss = output.item()
+                    
 
                 with torch.autograd.set_detect_anomaly(True):
                     scaler.scale(output).backward()#retain_graph=True
-                    #print("we prob not here")
+
+                """ for name, param in model.named_parameters():
+                        if 'object_detector.backbone.5.0.conv2.weight' in name:
+                            #print(name)
+                            print(param.grad.data.sum()) """
+                    
 
             except RuntimeError as e:  # out of memory error
                 log.info(f"Error: {e}")
@@ -524,7 +532,7 @@ def main():
     checkpoint = None
 
     model = get_model(checkpoint)
-
+    #print(model)
     opt = AdamW(model.parameters(), lr=LR)
     scaler = torch.cuda.amp.GradScaler()
 

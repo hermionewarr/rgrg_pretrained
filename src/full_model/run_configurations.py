@@ -27,9 +27,9 @@ Ideally, the training should go like this:
     by specifying them in checkpoint = torch.load(...) in line 567
     - train full model with src/full_model/train_full_model.py
 """
-RUN = 29
-CUDA_DEVICE = 1
-RUN_COMMENT = """simplified reports, just sentences refering to either card or PE. white square. classifier"""
+RUN = 2
+CUDA_DEVICE = 0
+RUN_COMMENT = """simplified reports, just sentences refering to either card or PE. white square. classifier. not pretrained"""
 SEED = 42
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
